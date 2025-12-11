@@ -98,10 +98,11 @@
    - Database operations (Supabase)
    - Resume uploads and downloads
 
-2. Set up custom domain (optional):
+2. Set up custom domain with GoDaddy:
    - In Vercel dashboard, go to Settings > Domains
-   - Add your custom domain (e.g., www.chefdhundo.com)
-   - Update DNS records as instructed
+   - Add your GoDaddy domain (e.g., chefdhundo.com)
+   - Vercel will show DNS records to add
+   - Go to GoDaddy DNS Management and add the records (see detailed steps below)
 
 3. Enable Analytics:
    - Vercel Analytics is already integrated via `@vercel/analytics`
@@ -128,6 +129,102 @@
 ### Database Connection Issues
 - Verify Supabase URL and keys
 - Check if IP restrictions are set in Supabase
+
+## Connecting GoDaddy Domain to Vercel
+
+### Step 1: Deploy to Vercel First
+Complete the deployment steps above to get your Vercel project URL (e.g., `your-project.vercel.app`)
+
+### Step 2: Add Domain in Vercel
+1. Go to your Vercel project dashboard
+2. Click **Settings** → **Domains**
+3. Enter your GoDaddy domain:
+   - `chefdhundo.com` (root domain)
+   - `www.chefdhundo.com` (www subdomain)
+4. Click **Add**
+
+### Step 3: Configure DNS in GoDaddy
+Vercel will provide DNS records. Now configure them in GoDaddy:
+
+#### For Root Domain (chefdhundo.com):
+1. Log in to GoDaddy → **My Products** → **DNS**
+2. Find your domain and click **Manage DNS**
+3. Add/Update these records:
+
+**Option A: Using A Records (Recommended)**
+```
+Type: A
+Name: @
+Value: 76.76.21.21
+TTL: 600 seconds
+```
+
+**Option B: Using CNAME (Alternative)**
+- Note: GoDaddy doesn't support CNAME for root domains easily
+- Use A record method above instead
+
+#### For WWW Subdomain (www.chefdhundo.com):
+```
+Type: CNAME
+Name: www
+Value: cname.vercel-dns.com
+TTL: 600 seconds
+```
+
+### Step 4: Wait for DNS Propagation
+- DNS changes take 5 minutes to 48 hours to propagate
+- Usually propagates within 1-2 hours
+- Check status in Vercel dashboard (Settings → Domains)
+- Use https://dnschecker.org to verify propagation
+
+### Step 5: Update Environment Variables
+Once domain is connected, update in Vercel:
+```
+NEXT_PUBLIC_APP_URL=https://chefdhundo.com
+```
+
+### Step 6: Update Service Configurations
+
+#### Update Clerk
+1. Go to Clerk dashboard → Configure → Paths
+2. Add authorized domains:
+   - `chefdhundo.com`
+   - `www.chefdhundo.com`
+3. Update redirect URLs
+
+#### Update Cashfree
+1. Go to Cashfree dashboard
+2. Add `chefdhundo.com` to allowed domains
+3. Update webhook URLs if needed
+
+#### Update RazorPay
+1. Go to RazorPay dashboard → Settings
+2. Add `chefdhundo.com` to authorized domains
+3. Update webhook endpoints
+
+#### Update Supabase
+1. Go to Supabase dashboard → Authentication → URL Configuration
+2. Add site URL: `https://chefdhundo.com`
+3. Add redirect URLs:
+   - `https://chefdhundo.com/**`
+   - `https://www.chefdhundo.com/**`
+
+### Troubleshooting GoDaddy + Vercel
+
+**Domain not verifying:**
+- Wait 24 hours for DNS propagation
+- Clear browser cache
+- Check DNS records are exactly as Vercel specified
+- Remove any conflicting records (old A records pointing elsewhere)
+
+**SSL Certificate issues:**
+- Vercel automatically provisions SSL (Let's Encrypt)
+- Can take up to 24 hours after DNS propagation
+- Ensure both www and root domain are added in Vercel
+
+**Redirect issues:**
+- In Vercel, configure www to redirect to root or vice versa
+- Settings → Domains → Click domain → Redirect
 
 ## Alternative Hosting Options
 
