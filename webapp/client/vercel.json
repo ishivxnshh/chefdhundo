@@ -1,0 +1,11 @@
+{
+  "buildCommand": "cd webapp/client && npm run build",
+  "outputDirectory": "webapp/client/.next",
+  "framework": "nextjs",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "/api/:path*"
+    }
+  ]
+}
