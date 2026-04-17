@@ -29,6 +29,17 @@ interface FilterState {
   profession: string
 }
 
+function dedupeResumesByUser(resumes: Resume[]): Resume[] {
+  const latestByUser = new Map<string, Resume>()
+  for (const resume of resumes) {
+    const key = resume.user_id || resume.id
+    if (!latestByUser.has(key)) {
+      latestByUser.set(key, resume)
+    }
+  }
+  return Array.from(latestByUser.values())
+}
+
 function getCachedResumes(filters?: FilterState, requireFullList: boolean = false): { data: Resume[], pagination?: PaginationInfo } | null {
   if (typeof window === 'undefined') return null
   try {
@@ -158,8 +169,9 @@ export const useSupabaseResumeStore = create<ResumeSupabaseState>((set, get) => 
     // Check cache first - REQUIRE full list
     const cached = getCachedResumes(undefined, true)
     if (cached && cached.data.length > 0) {
+      const dedupedCached = dedupeResumesByUser(cached.data)
       set({ 
-        resumes: cached.data, 
+        resumes: dedupedCached, 
         isLoading: false, 
         isResumeLoaded: true, 
         error: null,
@@ -181,6 +193,7 @@ export const useSupabaseResumeStore = create<ResumeSupabaseState>((set, get) => 
       
       if (result.success && result.data) {
         console.log('✅ Supabase Resume Store: Resumes fetched successfully:', result.data.length)
+        const dedupedResumes = dedupeResumesByUser(result.data)
         
         // Extract unique professions for filter dropdown
         const professions = new Set<string>()
@@ -191,9 +204,9 @@ export const useSupabaseResumeStore = create<ResumeSupabaseState>((set, get) => 
         })
         
         // Cache as FULL list
-        setCachedResumes(result.data, undefined, undefined, true)
+        setCachedResumes(dedupedResumes, undefined, undefined, true)
         set({ 
-          resumes: result.data, 
+          resumes: dedupedResumes, 
           isLoading: false, 
           isResumeLoaded: true,
           error: null,
@@ -229,8 +242,9 @@ export const useSupabaseResumeStore = create<ResumeSupabaseState>((set, get) => 
     if (page === 1) {
       const cached = getCachedResumes(filters)
       if (cached && cached.data.length > 0) {
+        const dedupedCached = dedupeResumesByUser(cached.data)
         set({ 
-          resumes: cached.data, 
+          resumes: dedupedCached, 
           isLoading: false, 
           isResumeLoaded: true, 
           error: null,
@@ -261,18 +275,19 @@ export const useSupabaseResumeStore = create<ResumeSupabaseState>((set, get) => 
       const result = await response.json()
       
       if (result.success && result.data) {
+        const dedupedResumes = dedupeResumesByUser(result.data)
         console.log('✅ Supabase Resume Store: Paginated resumes fetched:', {
-          count: result.data.length,
+          count: dedupedResumes.length,
           pagination: result.pagination
         })
         
         // Cache page 1 results with filters - NOT a full list
         if (page === 1) {
-          setCachedResumes(result.data, result.pagination, filters, false)
+          setCachedResumes(dedupedResumes, result.pagination, filters, false)
         }
         
         set({ 
-          resumes: result.data, 
+          resumes: dedupedResumes, 
           isLoading: false, 
           isResumeLoaded: true,
           error: null,

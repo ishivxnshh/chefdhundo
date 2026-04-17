@@ -68,15 +68,12 @@ export default async function RootLayout({
   //const publishableKey = 'pk_live_Y2xlcmsuY2hlZmRodW5kby5jb20k';
   const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
-  // Server-side auth: fetch Clerk user and Supabase user data
-  // Server-side auth: fetch Clerk user and Supabase user data
   let clerkUser = null;
+
   try {
     clerkUser = await currentUser();
-  } catch (err) {
-    // This typically happens on 404s for static assets where middleware is skipped
-    // We can safely ignore this and treat the user as signed out
-    console.warn("Auth check failed (likely static asset 404):", err);
+  } catch {
+    clerkUser = null;
   }
 
   let supabaseUser = null;

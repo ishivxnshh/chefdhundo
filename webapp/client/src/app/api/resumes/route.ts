@@ -1,6 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAllResumes, getAllResumesPaginated, createResume, getResumesByUserId } from '@/lib/supabase/database'
+import { auth } from '@clerk/nextjs/server'
+import { getAllResumes, getAllResumesPaginated, createResume, getResumesByUserId, getUserByClerkId } from '@/lib/supabase/database'
 import { ResumeInsert } from '@/types/supabase'
+
+function getRoleFromClaims(sessionClaims: unknown): string {
+  const claims = sessionClaims as
+    | {
+        metadata?: { role?: string }
+        publicMetadata?: { role?: string }
+        role?: string
+      }
+    | undefined
+
+  return claims?.metadata?.role || claims?.publicMetadata?.role || claims?.role || 'user'
+}
 
 // Cache configuration
 const CACHE_MAX_AGE = 60 // 1 minute
@@ -9,8 +22,21 @@ const STALE_WHILE_REVALIDATE = 300 // 5 minutes
 // GET /api/resumes - Get all resumes or filter by user_id (supports pagination)
 export async function GET(request: NextRequest) {
   try {
+    const { userId, sessionClaims } = await auth.protect()
+    const role = getRoleFromClaims(sessionClaims)
+    const currentUserResult = await getUserByClerkId(userId)
+
+    if (!currentUserResult.success || !currentUserResult.data) {
+      return NextResponse.json(
+        { success: false, error: 'User not found' },
+        { status: 404 }
+      )
+    }
+
+    const currentSupabaseUserId = currentUserResult.data.id
+
     const searchParams = request.nextUrl.searchParams
-    const userId = searchParams.get('user_id')
+    const requestedUserId = searchParams.get('user_id')
     
     // Pagination params
     const page = parseInt(searchParams.get('page') || '1', 10)
@@ -19,9 +45,16 @@ export async function GET(request: NextRequest) {
     const experience = searchParams.get('experience') || ''
     const profession = searchParams.get('profession') || ''
 
-    if (userId) {
+    if (requestedUserId) {
+      if (role !== 'admin' && requestedUserId !== currentSupabaseUserId) {
+        return NextResponse.json(
+          { success: false, error: 'Forbidden' },
+          { status: 403 }
+        )
+      }
+
       // Get resumes for specific user (no pagination needed)
-      const result = await getResumesByUserId(userId)
+      const result = await getResumesByUserId(requestedUserId)
       
       if (!result.success) {
         return NextResponse.json(
@@ -100,6 +133,19 @@ export async function GET(request: NextRequest) {
 // POST /api/resumes - Create new resume
 export async function POST(request: NextRequest) {
   try {
+    const { userId, sessionClaims } = await auth.protect()
+    const role = getRoleFromClaims(sessionClaims)
+    const currentUserResult = await getUserByClerkId(userId)
+
+    if (!currentUserResult.success || !currentUserResult.data) {
+      return NextResponse.json(
+        { success: false, error: 'User not found' },
+        { status: 404 }
+      )
+    }
+
+    const currentSupabaseUserId = currentUserResult.data.id
+
     const body = await request.json()
 
     // Validate required fields
@@ -107,6 +153,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'user_id, name, and email are required' },
         { status: 400 }
+      )
+    }
+
+    if (role !== 'admin' && body.user_id !== currentSupabaseUserId) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden' },
+        { status: 403 }
       )
     }
 

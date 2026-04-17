@@ -241,7 +241,7 @@ export async function createResume(resumeData: ResumeInsert): Promise<ApiRespons
   try {
     const { data, error } = await supabaseAdmin
       .from('resumes')
-      .insert(resumeData)
+      .upsert(resumeData, { onConflict: 'user_id' })
       .select()
       .single()
 
@@ -382,14 +382,14 @@ export async function getAllResumesPaginated(options: {
 }): Promise<PaginatedResponse<Resume[]>> {
   try {
     const { page, limit, search, experience, profession } = options
-    const offset = (page - 1) * limit
 
     console.log('🔍 Database: Fetching paginated resumes...', { page, limit, search, experience, profession })
 
-    // Build the base query
+    // Build the base filtered query, then dedupe by user and paginate in memory.
+    // This guarantees one card per user even if historical duplicate resume rows exist.
     let query = supabaseAdmin
       .from('resumes')
-      .select('*', { count: 'exact' })
+      .select('*')
 
     // Apply search filter (name, email, phone, profession)
     if (search && search.trim()) {
@@ -420,35 +420,47 @@ export async function getAllResumesPaginated(options: {
       query = query.or(`profession.eq.${profession},work_type.eq.${profession},job_role.eq.${profession}`)
     }
 
-    // Apply ordering and pagination
-    const { data, error, count } = await query
+    // Apply ordering (latest resume first per user after dedupe)
+    const { data, error } = await query
       .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1)
 
     if (error) {
       console.error('❌ Database: Error fetching paginated resumes:', error)
       return { success: false, error: error.message }
     }
 
-    const total = count || 0
+    const latestByUser = new Map<string, Resume>()
+    for (const resume of data || []) {
+      const key = resume.user_id || resume.id
+      if (!latestByUser.has(key)) {
+        latestByUser.set(key, resume)
+      }
+    }
+
+    const dedupedResumes = Array.from(latestByUser.values())
+    const total = dedupedResumes.length
     const totalPages = Math.ceil(total / limit)
+    const safePage = Math.min(Math.max(page, 1), Math.max(totalPages, 1))
+    const offset = (safePage - 1) * limit
+    const paginatedResumes = dedupedResumes.slice(offset, offset + limit)
 
     console.log('✅ Database: Successfully fetched paginated resumes:', {
-      fetched: data?.length || 0,
+      fetched: paginatedResumes.length,
+      dedupedTotal: total,
       total,
-      page,
+      page: safePage,
       totalPages
     })
 
     return {
       success: true,
-      data: data || [],
+      data: paginatedResumes,
       pagination: {
-        page,
+        page: safePage,
         limit,
         total,
         totalPages,
-        hasMore: page < totalPages
+        hasMore: safePage < totalPages
       }
     }
   } catch (error) {

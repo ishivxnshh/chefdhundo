@@ -60,7 +60,7 @@ CREATE INDEX IF NOT EXISTS idx_users_clerk_user_id ON users(clerk_user_id);
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 CREATE INDEX IF NOT EXISTS idx_users_chef ON users(chef);
-CREATE INDEX IF NOT EXISTS idx_resumes_user_id ON resumes(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_resumes_user_id ON resumes(user_id) WHERE user_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_resumes_email ON resumes(email);
 CREATE INDEX IF NOT EXISTS idx_resumes_city ON resumes(city);
 CREATE INDEX IF NOT EXISTS idx_resumes_state ON resumes(user_state);
