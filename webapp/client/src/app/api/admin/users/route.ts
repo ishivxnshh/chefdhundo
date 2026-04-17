@@ -16,7 +16,10 @@ function getRoleFromClaims(sessionClaims: unknown): string {
 
 export async function GET() {
   try {
-    const { sessionClaims } = await auth.protect()
+    const { userId, sessionClaims } = await auth()
+    if (!userId) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
     const role = getRoleFromClaims(sessionClaims)
 
     if (role !== 'admin') {

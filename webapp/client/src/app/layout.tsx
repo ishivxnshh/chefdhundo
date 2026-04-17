@@ -50,11 +50,11 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: "/website/home/logo.png",
-    shortcut: "/website/icons/logo.png",
-    apple: "/website/icons/logo.png",
+    shortcut: "/website/home/logo.png",
+    apple: "/website/home/logo.png",
     other: {
       rel: "apple-touch-icon-precomposed",
-      url: "/website/icons/apple-touch-icon-precomposed.png",
+      url: "/website/home/logo.png",
     },
   },
 };

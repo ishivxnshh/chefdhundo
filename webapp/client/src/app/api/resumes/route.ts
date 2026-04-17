@@ -22,7 +22,13 @@ const STALE_WHILE_REVALIDATE = 300 // 5 minutes
 // GET /api/resumes - Get all resumes or filter by user_id (supports pagination)
 export async function GET(request: NextRequest) {
   try {
-    const { userId, sessionClaims } = await auth.protect()
+    const { userId, sessionClaims } = await auth()
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
     const role = getRoleFromClaims(sessionClaims)
     const currentUserResult = await getUserByClerkId(userId)
 
@@ -133,7 +139,13 @@ export async function GET(request: NextRequest) {
 // POST /api/resumes - Create new resume
 export async function POST(request: NextRequest) {
   try {
-    const { userId, sessionClaims } = await auth.protect()
+    const { userId, sessionClaims } = await auth()
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
     const role = getRoleFromClaims(sessionClaims)
     const currentUserResult = await getUserByClerkId(userId)
 

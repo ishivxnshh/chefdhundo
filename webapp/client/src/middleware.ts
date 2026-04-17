@@ -2,8 +2,7 @@ import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 
 const isDashboardRoute = createRouteMatcher(['/dashboard(.*)']);
-const isAdminRoute = createRouteMatcher(['/admin(.*)', '/api/admin(.*)']);
-const isProtectedApiRoute = createRouteMatcher(['/api/resumes(.*)']);
+const isAdminRoute = createRouteMatcher(['/admin(.*)']);
 
 function getRoleFromClaims(sessionClaims: unknown): string {
   const claims = sessionClaims as
@@ -23,7 +22,7 @@ function getRoleFromClaims(sessionClaims: unknown): string {
 }
 
 export default clerkMiddleware(async (auth, req) => {
-  if (isDashboardRoute(req) || isAdminRoute(req) || isProtectedApiRoute(req)) {
+  if (isDashboardRoute(req) || isAdminRoute(req)) {
     await auth.protect();
   }
 

@@ -119,13 +119,13 @@ function Navbar() {
 
   // Memoized nav links
   const navLinks = useMemo(() => [
-    { href: "/", text: "Home", primary: false },
-    { href: "/findchefs", text: "Find Chef", primary: false },
-    { href: "/dashboard", text: "Dashboard", primary: false },
+    { href: "/", text: "Home", primary: false, prefetch: true },
+    { href: "/findchefs", text: "Find Chef", primary: false, prefetch: true },
+    { href: "/dashboard", text: "Dashboard", primary: false, prefetch: false },
   ], [])
 
   const displayLinks = useMemo(() => 
-    isAdminUser ? [...navLinks, { href: "/admin", text: "Admin", primary: false }] : navLinks
+    isAdminUser ? [...navLinks, { href: "/admin", text: "Admin", primary: false, prefetch: false }] : navLinks
   , [isAdminUser, navLinks])
 
   return (
@@ -153,6 +153,7 @@ function Navbar() {
                 <Link
                   key={link.href}
                   href={link.href}
+                  prefetch={link.prefetch}
                   className="text-gray-900 hover:text-gray-700 font-medium"
                 >
                   {link.text}
@@ -255,6 +256,7 @@ function Navbar() {
                    <Link
                      key={link.href}
                      href={link.href}
+                     prefetch={link.prefetch}
                      className="block px-3 py-2 text-gray-900 hover:text-gray-700 font-medium"
                      onClick={closeMobileMenu}
                    >
