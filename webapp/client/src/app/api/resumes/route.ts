@@ -23,23 +23,15 @@ const STALE_WHILE_REVALIDATE = 300 // 5 minutes
 export async function GET(request: NextRequest) {
   try {
     const { userId, sessionClaims } = await auth()
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
     const role = getRoleFromClaims(sessionClaims)
-    const currentUserResult = await getUserByClerkId(userId)
+    let currentSupabaseUserId: string | null = null
 
-    if (!currentUserResult.success || !currentUserResult.data) {
-      return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
-      )
+    if (userId) {
+      const currentUserResult = await getUserByClerkId(userId)
+      if (currentUserResult.success && currentUserResult.data) {
+        currentSupabaseUserId = currentUserResult.data.id
+      }
     }
-
-    const currentSupabaseUserId = currentUserResult.data.id
 
     const searchParams = request.nextUrl.searchParams
     const requestedUserId = searchParams.get('user_id')
@@ -52,6 +44,13 @@ export async function GET(request: NextRequest) {
     const profession = searchParams.get('profession') || ''
 
     if (requestedUserId) {
+      if (!userId) {
+        return NextResponse.json(
+          { success: false, error: 'Unauthorized' },
+          { status: 401 }
+        )
+      }
+
       if (role !== 'admin' && requestedUserId !== currentSupabaseUserId) {
         return NextResponse.json(
           { success: false, error: 'Forbidden' },

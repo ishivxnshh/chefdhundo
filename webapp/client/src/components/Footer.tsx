@@ -101,8 +101,9 @@ function Footer() {
             <ul className="space-y-2">
               {quickLinks.map((link) => (
                 <li key={link.href}>
-                  <Link
-                    href={link.href}
+                    <Link
+                      href={link.href}
+                      prefetch={link.href === '/dashboard' ? false : undefined}
                     className="text-gray-300 hover:text-orange-500 transition-colors duration-200 text-sm"
                   >
                     {link.text}

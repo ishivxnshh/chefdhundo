@@ -119,13 +119,13 @@ function Navbar() {
 
   // Memoized nav links
   const navLinks = useMemo(() => [
-    { href: "/", text: "Home", primary: false, prefetch: true },
-    { href: "/findchefs", text: "Find Chef", primary: false, prefetch: true },
-    { href: "/dashboard", text: "Dashboard", primary: false, prefetch: false },
+    { href: "/", text: "Home", primary: false, prefetch: true, fullReload: false },
+    { href: "/findchefs", text: "Find Chef", primary: false, prefetch: true, fullReload: false },
+    { href: "/dashboard", text: "Dashboard", primary: false, prefetch: false, fullReload: true },
   ], [])
 
   const displayLinks = useMemo(() => 
-    isAdminUser ? [...navLinks, { href: "/admin", text: "Admin", primary: false, prefetch: false }] : navLinks
+    isAdminUser ? [...navLinks, { href: "/admin", text: "Admin", primary: false, prefetch: false, fullReload: true }] : navLinks
   , [isAdminUser, navLinks])
 
   return (
@@ -150,14 +150,24 @@ function Navbar() {
             {/* Desktop Menu */}
              <div className="hidden md:flex items-center space-x-8">
               {displayLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  prefetch={link.prefetch}
-                  className="text-gray-900 hover:text-gray-700 font-medium"
-                >
-                  {link.text}
-                </Link>
+                link.fullReload ? (
+                  <a
+                    key={link.href}
+                    href={link.href}
+                    className="text-gray-900 hover:text-gray-700 font-medium"
+                  >
+                    {link.text}
+                  </a>
+                ) : (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    prefetch={link.prefetch}
+                    className="text-gray-900 hover:text-gray-700 font-medium"
+                  >
+                    {link.text}
+                  </Link>
+                )
               ))}
                
                                {/* User Badges - Role, Chef Status, Loading, etc. */}
@@ -253,15 +263,26 @@ function Navbar() {
              <div className="md:hidden">
                <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 bg-white border-t border-gray-200">
                 {displayLinks.map((link) => (
-                   <Link
-                     key={link.href}
-                     href={link.href}
-                     prefetch={link.prefetch}
-                     className="block px-3 py-2 text-gray-900 hover:text-gray-700 font-medium"
-                     onClick={closeMobileMenu}
-                   >
-                     {link.text}
-                   </Link>
+                   link.fullReload ? (
+                     <a
+                       key={link.href}
+                       href={link.href}
+                       className="block px-3 py-2 text-gray-900 hover:text-gray-700 font-medium"
+                       onClick={closeMobileMenu}
+                     >
+                       {link.text}
+                     </a>
+                   ) : (
+                     <Link
+                       key={link.href}
+                       href={link.href}
+                       prefetch={link.prefetch}
+                       className="block px-3 py-2 text-gray-900 hover:text-gray-700 font-medium"
+                       onClick={closeMobileMenu}
+                     >
+                       {link.text}
+                     </Link>
+                   )
                  ))}
                </div>
              </div>
