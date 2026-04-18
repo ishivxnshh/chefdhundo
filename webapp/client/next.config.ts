@@ -10,8 +10,11 @@ const cspHeader = [
   "img-src 'self' data: blob: https:",
   "font-src 'self' data: https:",
   "style-src 'self' 'unsafe-inline' https:",
-  `script-src 'self' 'unsafe-inline' ${isDev ? "'unsafe-eval'" : ''} https://www.googletagmanager.com https://va.vercel-scripts.com https://*.clerk.accounts.dev https://accounts.chefdhundo.com`.replace(/\s+/g, ' ').trim(),
+  `script-src 'self' 'unsafe-inline' ${isDev ? "'unsafe-eval'" : ''} https://www.googletagmanager.com https://va.vercel-scripts.com https://clerk.chefdhundo.com https://accounts.chefdhundo.com https://*.clerk.accounts.dev`.replace(/\s+/g, ' ').trim(),
+  `script-src-elem 'self' 'unsafe-inline' ${isDev ? "'unsafe-eval'" : ''} https://www.googletagmanager.com https://va.vercel-scripts.com https://clerk.chefdhundo.com https://accounts.chefdhundo.com https://*.clerk.accounts.dev`.replace(/\s+/g, ' ').trim(),
+  "script-src-attr 'unsafe-inline'",
   "connect-src 'self' https: wss:",
+  "frame-src 'self' https://clerk.chefdhundo.com https://accounts.chefdhundo.com https://*.clerk.accounts.dev",
 ].join('; ');
 
 const nextConfig: NextConfig = {
