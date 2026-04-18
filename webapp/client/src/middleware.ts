@@ -23,7 +23,9 @@ function getRoleFromClaims(sessionClaims: unknown): string {
 
 export default clerkMiddleware(async (auth, req) => {
   if (isDashboardRoute(req) || isAdminRoute(req)) {
-    await auth.protect();
+    await auth.protect({
+      unauthenticatedUrl: new URL('/sign-in', req.url).toString(),
+    });
   }
 
   if (isAdminRoute(req)) {

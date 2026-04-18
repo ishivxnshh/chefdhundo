@@ -23,7 +23,12 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { sessionClaims } = await auth.protect();
+  const { userId, sessionClaims } = await auth();
+
+  if (!userId) {
+    redirect('/sign-in');
+  }
+
   const role = getRoleFromClaims(sessionClaims);
 
   if (role !== 'admin') {
