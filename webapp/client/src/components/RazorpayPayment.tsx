@@ -145,7 +145,7 @@ const RazorpayPayment: React.FC<RazorpayPaymentProps> = ({
         currency: data.currency,
         name: "Chef Dhundo",
         description: `Upgrade to ${planName}`,
-        image: "/website/icons/logo.png", // Ensure this path is correct
+        image: "/website/home/logo.png",
         order_id: data.orderId,
         handler: async function (response: RazorpaySuccessResponse) {
           // 3. Verify Payment
