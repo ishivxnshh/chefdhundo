@@ -8,6 +8,12 @@ function isMissingResumesTableError(error: string | undefined): boolean {
   return error.toLowerCase().includes("could not find the table 'public.resumes'")
 }
 
+function isResumesPermissionError(error: string | undefined): boolean {
+  if (!error) return false
+  const normalized = error.toLowerCase()
+  return normalized.includes('permission denied') && normalized.includes('resumes')
+}
+
 function getRoleFromClaims(sessionClaims: unknown): string {
   const claims = sessionClaims as
     | {
@@ -79,6 +85,18 @@ export async function GET(request: NextRequest) {
           )
         }
 
+        if (isResumesPermissionError(result.error)) {
+          return NextResponse.json(
+            {
+              success: true,
+              data: [],
+              schemaReady: false,
+              message: 'Supabase role cannot read resumes table. Check RLS policies or SUPABASE_SERVICE_ROLE in deployment env.',
+            },
+            { status: 200 }
+          )
+        }
+
         return NextResponse.json(
           { success: false, error: result.error, data: null },
           { status: 200 }
@@ -124,6 +142,25 @@ export async function GET(request: NextRequest) {
             )
           }
 
+          if (isResumesPermissionError(result.error)) {
+            return NextResponse.json(
+              {
+                success: true,
+                data: [],
+                pagination: {
+                  page,
+                  limit,
+                  total: 0,
+                  totalPages: 1,
+                  hasMore: false,
+                },
+                schemaReady: false,
+                message: 'Supabase role cannot read resumes table. Check RLS policies or SUPABASE_SERVICE_ROLE in deployment env.',
+              },
+              { status: 200 }
+            )
+          }
+
           return NextResponse.json(
             { success: false, error: result.error },
             { status: 500 }
@@ -152,6 +189,18 @@ export async function GET(request: NextRequest) {
                 data: [],
                 schemaReady: false,
                 message: 'Resumes table is not initialized in Supabase yet',
+              },
+              { status: 200 }
+            )
+          }
+
+          if (isResumesPermissionError(result.error)) {
+            return NextResponse.json(
+              {
+                success: true,
+                data: [],
+                schemaReady: false,
+                message: 'Supabase role cannot read resumes table. Check RLS policies or SUPABASE_SERVICE_ROLE in deployment env.',
               },
               { status: 200 }
             )
@@ -267,6 +316,17 @@ export async function POST(request: NextRequest) {
             success: false,
             schemaReady: false,
             error: 'Resumes table is not initialized in Supabase yet',
+          },
+          { status: 503 }
+        )
+      }
+
+      if (isResumesPermissionError(result.error)) {
+        return NextResponse.json(
+          {
+            success: false,
+            schemaReady: false,
+            error: 'Supabase role cannot write resumes table. Check RLS policies or SUPABASE_SERVICE_ROLE in deployment env.',
           },
           { status: 503 }
         )

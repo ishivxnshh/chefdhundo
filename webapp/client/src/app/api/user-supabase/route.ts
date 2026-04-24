@@ -15,6 +15,12 @@ function isMissingUsersTableError(error: string | undefined): boolean {
   return normalized.includes("could not find the table 'public.users'")
 }
 
+function isUsersPermissionError(error: string | undefined): boolean {
+  if (!error) return false
+  const normalized = error.toLowerCase()
+  return normalized.includes('permission denied') && normalized.includes('users')
+}
+
 // GET /api/user-supabase?clerk_id=xxx
 export async function GET(request: NextRequest) {
   try {
@@ -40,6 +46,18 @@ export async function GET(request: NextRequest) {
             message: 'Users table is not initialized in Supabase yet',
           },
           { status: 200 }
+        )
+      }
+
+      if (isUsersPermissionError(result.error)) {
+        return NextResponse.json(
+          {
+            success: false,
+            data: null,
+            error: 'Supabase role cannot read users table. Check RLS policies or SUPABASE_SERVICE_ROLE in deployment env.',
+            schemaReady: false,
+          },
+          { status: 503 }
         )
       }
 
@@ -95,6 +113,17 @@ export async function POST(request: NextRequest) {
             success: false,
             schemaReady: false,
             error: 'Users table is not initialized in Supabase yet',
+          },
+          { status: 503 }
+        )
+      }
+
+      if (isUsersPermissionError(errorMessage)) {
+        return NextResponse.json(
+          {
+            success: false,
+            schemaReady: false,
+            error: 'Supabase role cannot write users table. Check RLS policies or SUPABASE_SERVICE_ROLE in deployment env.',
           },
           { status: 503 }
         )
@@ -186,6 +215,17 @@ export async function PUT(request: NextRequest) {
             success: false,
             schemaReady: false,
             error: 'Users table is not initialized in Supabase yet',
+          },
+          { status: 503 }
+        )
+      }
+
+      if (isUsersPermissionError(result.error)) {
+        return NextResponse.json(
+          {
+            success: false,
+            schemaReady: false,
+            error: 'Supabase role cannot update users table. Check RLS policies or SUPABASE_SERVICE_ROLE in deployment env.',
           },
           { status: 503 }
         )

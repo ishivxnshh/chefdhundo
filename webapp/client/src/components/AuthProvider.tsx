@@ -78,7 +78,8 @@ export function AuthProvider({ children, initialUser }: AuthProviderProps) {
       
       // Use the store's existing method to fetch/create user
       store.findAndSetCurrentUserByClerkId(clerkUser.id).then((foundUser) => {
-        if (!foundUser && clerkUser) {
+        const latestError = useSupabaseUserStore.getState().error
+        if (!foundUser && clerkUser && !latestError) {
           store.createUserFromClerkData(clerkUser)
         }
       })

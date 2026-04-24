@@ -61,6 +61,11 @@ function clearCachedUser() {
   }
 }
 
+function isNotFoundMessage(error: string | null | undefined): boolean {
+  if (!error) return false
+  return error.toLowerCase().includes('user not found')
+}
+
 type ClerkEmailAddress = {
   id: string
   emailAddress: string
@@ -148,11 +153,12 @@ export const useSupabaseUserStore = create<UserSupabaseState>((set, get) => ({
         })
       } else {
         // If API returns no data but success (rare), keep existing if possible or set null
+        const backendError = typeof result.error === 'string' ? result.error : null
         set({ 
           currentUser: null, 
           isLoading: false, 
           isUserLoaded: true,
-          error: null
+          error: isNotFoundMessage(backendError) ? null : backendError
         })
       }
     } catch (error) {
@@ -202,11 +208,12 @@ export const useSupabaseUserStore = create<UserSupabaseState>((set, get) => ({
         
         return foundUser
       } else {
+        const backendError = typeof result.error === 'string' ? result.error : null
         set({ 
           currentUser: null, 
           isLoading: false, 
           isUserLoaded: true,
-          error: null 
+          error: isNotFoundMessage(backendError) ? null : backendError
         })
         
         return null
