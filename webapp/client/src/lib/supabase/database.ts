@@ -241,7 +241,7 @@ export async function createResume(resumeData: ResumeInsert): Promise<ApiRespons
   try {
     const { data, error } = await supabaseAdmin
       .from('resumes')
-      .upsert(resumeData, { onConflict: 'user_id' })
+      .insert([resumeData])   // ✅ FIXED (NO UPSERT)
       .select()
       .single()
 

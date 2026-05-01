@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getAllResumes, getAllResumesPaginated, createResume, getResumesByUserId, getUserByClerkId } from '@/lib/supabase/database'
 import { ResumeInsert } from '@/types/supabase'
+import { generateToken } from "@/lib/generateToken";
+
 
 function isMissingResumesTableError(error: string | undefined): boolean {
   if (!error) return false
@@ -236,46 +238,64 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const { userId, sessionClaims } = await auth()
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-    const role = getRoleFromClaims(sessionClaims)
-    const currentUserResult = await getUserByClerkId(userId)
-
-    if (!currentUserResult.success || !currentUserResult.data) {
-      return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
-      )
-    }
-
-    const currentSupabaseUserId = currentUserResult.data.id
 
     const body = await request.json()
+    const isWhatsapp = body.from_whatsapp === true
 
-    // Validate required fields
-    if (!body.user_id || !body.name || !body.email) {
-      return NextResponse.json(
-        { success: false, error: 'user_id, name, and email are required' },
-        { status: 400 }
-      )
+    let currentSupabaseUserId: string | null = null
+
+    // ✅ Only fetch user if NOT WhatsApp
+    if (!isWhatsapp) {
+      if (!userId) {
+        return NextResponse.json(
+          { success: false, error: 'Unauthorized' },
+          { status: 401 }
+        )
+      }
+
+      const currentUserResult = await getUserByClerkId(userId)
+
+      if (!currentUserResult.success || !currentUserResult.data) {
+        return NextResponse.json(
+          { success: false, error: 'User not found' },
+          { status: 404 }
+        )
+      }
+
+      currentSupabaseUserId = currentUserResult.data.id
     }
 
-    if (role !== 'admin' && body.user_id !== currentSupabaseUserId) {
-      return NextResponse.json(
-        { success: false, error: 'Forbidden' },
-        { status: 403 }
-      )
+    const role = getRoleFromClaims(sessionClaims)
+
+    // ✅ Validation (different for WhatsApp)
+    if (isWhatsapp) {
+      if (!body.name || !body.phone) {
+        return NextResponse.json(
+          { success: false, error: 'name and phone are required' },
+          { status: 400 }
+        )
+      }
+    } else {
+      if (!body.user_id || !body.name || !body.email) {
+        return NextResponse.json(
+          { success: false, error: 'user_id, name, and email are required' },
+          { status: 400 }
+        )
+      }
+
+      if (role !== 'admin' && body.user_id !== currentSupabaseUserId) {
+        return NextResponse.json(
+          { success: false, error: 'Forbidden' },
+          { status: 403 }
+        )
+      }
     }
 
-    // Create resume data object matching Supabase schema
+    // ✅ Resume data
     const resumeData: ResumeInsert = {
-      user_id: body.user_id,
+      user_id: isWhatsapp ? null : body.user_id,
       name: body.name,
-      email: body.email,
+      email: isWhatsapp ? `${body.phone}@wa.chefdhundo.com` : body.email,
       phone: body.phone || null,
       user_location: body.user_location || null,
       age_range: body.age_range || null,
@@ -304,34 +324,16 @@ export async function POST(request: NextRequest) {
       bio: body.bio || null,
       passport: body.passport || null,
       photo: body.photo || null,
-      resume_file: body.resume_file || null
+      resume_file: body.resume_file || null,
+
+      // 🔥 NEW (IMPORTANT)
+      claimed: isWhatsapp ? false : true,
+      claim_token: isWhatsapp ? generateToken() : null
     }
 
     const result = await createResume(resumeData)
-    
+
     if (!result.success) {
-      if (isMissingResumesTableError(result.error)) {
-        return NextResponse.json(
-          {
-            success: false,
-            schemaReady: false,
-            error: 'Resumes table is not initialized in Supabase yet',
-          },
-          { status: 503 }
-        )
-      }
-
-      if (isResumesPermissionError(result.error)) {
-        return NextResponse.json(
-          {
-            success: false,
-            schemaReady: false,
-            error: 'Supabase role cannot write resumes table. Check RLS policies or SUPABASE_SERVICE_ROLE in deployment env.',
-          },
-          { status: 503 }
-        )
-      }
-
       return NextResponse.json(
         { success: false, error: result.error },
         { status: 400 }
@@ -341,8 +343,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: result.data,
-      message: 'Resume created successfully'
+      token: isWhatsapp ? result.data?.claim_token : null
     }, { status: 201 })
+
   } catch (error) {
     console.error('Error in POST /api/resumes:', error)
     return NextResponse.json(
