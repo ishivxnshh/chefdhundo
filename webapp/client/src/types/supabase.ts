@@ -276,12 +276,14 @@ export interface Database {
           photo: string | null
           resume_file: string | null
           verified: string | null
+          claimed: boolean
+          claim_token: string | null
           created_at: string
           updated_at: string
         }
         Insert: {
           id?: string
-          user_id: string
+          user_id?: string | null
           name: string
           email: string
           phone?: string | null
@@ -314,6 +316,8 @@ export interface Database {
           photo?: string | null
           resume_file?: string | null
           verified?: string | null
+          claimed?: boolean
+          claim_token?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -352,6 +356,8 @@ export interface Database {
           photo?: string | null
           resume_file?: string | null
           verified?: string | null
+          claimed?: boolean
+          claim_token?: string | null
           created_at?: string
           updated_at?: string
         }

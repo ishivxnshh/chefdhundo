@@ -2,17 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getAllResumes, getAllResumesPaginated, createResume, getResumesByUserId, getUserByClerkId } from '@/lib/supabase/database'
 import { ResumeInsert } from '@/types/supabase'
-import { generateToken } from "@/lib/generateToken";
+import { generateToken } from "@/lib/generateToken"
 
-
-function isMissingResumesTableError(error: string | undefined): boolean {
-  if (!error) return false
-  return error.toLowerCase().includes("could not find the table 'public.resumes'")
+function isMissingResumesTableError(error: any): boolean {
+  const normalized = String(error?.message || '').toLowerCase()
+  return normalized.includes('no rows found') || normalized.includes('does not exist')
 }
 
-function isResumesPermissionError(error: string | undefined): boolean {
-  if (!error) return false
-  const normalized = error.toLowerCase()
+function isResumesPermissionError(error: any): boolean {
+  const normalized = String(error?.message || '').toLowerCase()
   return normalized.includes('permission denied') && normalized.includes('resumes')
 }
 
@@ -292,8 +290,16 @@ export async function POST(request: NextRequest) {
     }
 
     // ✅ Resume data
+    // 🔥 DEBUG: Log user IDs before creating resume
+    if (!isWhatsapp) {
+      console.log('📋 Resume Creation - Website Flow')
+      console.log('  🔐 Clerk userId:', userId)
+      console.log('  📦 Supabase userId:', currentSupabaseUserId)
+      console.log('  📨 Request user_id:', body.user_id)
+    }
+
     const resumeData: ResumeInsert = {
-      user_id: isWhatsapp ? null : body.user_id,
+      user_id: isWhatsapp ? null : currentSupabaseUserId,
       name: body.name,
       email: isWhatsapp ? `${body.phone}@wa.chefdhundo.com` : body.email,
       phone: body.phone || null,
@@ -329,6 +335,11 @@ export async function POST(request: NextRequest) {
       // 🔥 NEW (IMPORTANT)
       claimed: isWhatsapp ? false : true,
       claim_token: isWhatsapp ? generateToken() : null
+    }
+
+    // 🔥 DEBUG: Log final resumeData.user_id before insert
+    if (!isWhatsapp) {
+      console.log('  ✅ Final resumeData.user_id:', resumeData.user_id)
     }
 
     const result = await createResume(resumeData)

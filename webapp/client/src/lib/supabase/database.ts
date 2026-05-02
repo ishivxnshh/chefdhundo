@@ -239,6 +239,13 @@ export async function getAllChefs(): Promise<ApiResponse<User[]>> {
  */
 export async function createResume(resumeData: ResumeInsert): Promise<ApiResponse<Resume>> {
   try {
+    // 🔥 DEBUG: Log resume details before insert
+    console.log('💾 Database: Creating resume')
+    console.log('  📝 Resume name:', resumeData.name)
+    console.log('  👤 Resume user_id:', resumeData.user_id)
+    console.log('  ✔️ Resume claimed:', resumeData.claimed)
+    console.log('  🎫 Resume claim_token:', resumeData.claim_token)
+
     const { data, error } = await supabaseAdmin
       .from('resumes')
       .insert([resumeData])   // ✅ FIXED (NO UPSERT)
@@ -246,13 +253,14 @@ export async function createResume(resumeData: ResumeInsert): Promise<ApiRespons
       .single()
 
     if (error) {
-      console.error('Error creating resume:', error)
+      console.error('❌ Error creating resume:', error)
       return { success: false, error: error.message }
     }
 
+    console.log('✅ Database: Resume created successfully with ID:', data.id, 'user_id:', data.user_id)
     return { success: true, data }
   } catch (error) {
-    console.error('Unexpected error creating resume:', error)
+    console.error('❌ Unexpected error creating resume:', error)
     return { success: false, error: 'Failed to create resume' }
   }
 }
