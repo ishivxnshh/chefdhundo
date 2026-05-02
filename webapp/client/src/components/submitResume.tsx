@@ -72,11 +72,30 @@ interface ResumeFormData {
 }
 
 export function SubmitResume() {
-  const { createResume, isLoading } = useSupabaseResumeStore();
+  const { createResume, isLoading, fetchResumesByUserId, resumes } = useSupabaseResumeStore();
   const currentUser = useSupabaseCurrentUser();
   const updateUser = useSupabaseUserStore((state) => state.updateUser);
   const router = useRouter();
   const [currentStep, setCurrentStep] = React.useState(1);
+  const hasFetchedResumes = React.useRef(false);
+
+  React.useEffect(() => {
+    if (currentUser?.id && !hasFetchedResumes.current) {
+      console.log("CURRENT USER ID:", currentUser.id);
+      console.log("FETCHING RESUME WITH user_id");
+      hasFetchedResumes.current = true;
+      fetchResumesByUserId(currentUser.id);
+    }
+  }, [currentUser?.id, fetchResumesByUserId]);
+
+  React.useEffect(() => {
+    if (hasFetchedResumes.current) {
+      console.log("RESUME RESULT:", resumes);
+    }
+  }, [resumes]);
+
+  const hasResume = resumes.length > 0;
+
   const [resumeForm, setResumeForm] = React.useState<ResumeFormData>({
     // Step 1 - Essential Contact Info
     name: '',
@@ -221,6 +240,8 @@ export function SubmitResume() {
         photo: null,
         resume_file: null,
         verified: 'no',
+        claimed: true,
+        claim_token: null,
       };
       
       // Save to Supabase database
@@ -584,7 +605,7 @@ export function SubmitResume() {
       transition={{ duration: 0.7, ease: 'easeOut' }}
       className="flex-1"
     >
-      {currentUser?.chef === 'yes' ? (
+      {hasResume ? (
         // Show this when user has already submitted resume
         <Card className="p-8 rounded-2xl shadow-xl border-0 bg-gradient-to-br from-orange-50 to-white">
           <div className="text-center space-y-6">

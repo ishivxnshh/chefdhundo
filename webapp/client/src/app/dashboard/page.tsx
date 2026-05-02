@@ -84,7 +84,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     hasFetchedResumes.current = false;
-  }, [currentUser?.id, isChef]);
+  }, [currentUser?.id]);
 
   // Fetch current user from Supabase when Clerk user is available
   useEffect(() => {
@@ -95,16 +95,22 @@ export default function DashboardPage() {
     }
   }, [clerkUser?.id, findAndSetCurrentUserByClerkId]);
 
-  // Fetch user's resumes when current user is found and is a chef
+  // Fetch user's resumes when current user is found
   useEffect(() => {
-    if (currentUser?.id && isChef && !hasFetchedResumes.current) {
-      console.log('🔍 User is a chef, fetching resumes for Supabase user ID:', currentUser.id);
-      console.log('🔍 Current user object:', currentUser);
+    if (currentUser?.id && !hasFetchedResumes.current) {
+      console.log("CURRENT USER ID:", currentUser?.id)
+      console.log("FETCHING RESUME WITH user_id")
       hasFetchedResumes.current = true;
       fetchResumesByUserId(currentUser.id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.id, isChef]);
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    if (hasFetchedResumes.current) {
+      console.log("RESUME RESULT:", resumes)
+    }
+  }, [resumes]);
 
   // Set the first resume as user's resume (assuming one resume per user)
   useEffect(() => {
@@ -483,7 +489,7 @@ export default function DashboardPage() {
     );
   };
 
-  if (userLoading || (isChef && resumesLoading && !userResume)) {
+  if (userLoading || (resumesLoading && !userResume)) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-lg">Loading...</div>
@@ -491,7 +497,7 @@ export default function DashboardPage() {
     );
   }
 
-  if (userError || (isChef && resumesError)) {
+  if (userError || resumesError) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-red-500">Error: {userError || resumesError}</div>
@@ -499,8 +505,8 @@ export default function DashboardPage() {
     );
   }
 
-  // If user is a chef and has resume data, show editable form
-  if (isChef && userResume) {
+  // If user has resume data, show editable form
+  if (userResume) {
     return (
       <div className="min-h-screen bg-gray-50 py-8 mt-16">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
