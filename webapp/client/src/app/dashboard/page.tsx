@@ -59,6 +59,7 @@ export default function DashboardPage() {
   const { user: clerkUser } = useUser();
   const { findAndSetCurrentUserByClerkId, currentUser, isLoading: userLoading, error: userError } = useSupabaseUserStore();
   const { fetchResumesByUserId, resumes, updateResume, isLoading: resumesLoading, error: resumesError } = useSupabaseResumeStore();
+  const emailSyncedRef = useRef(false);
   const [userResume, setUserResume] = useState<Resume | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editValues, setEditValues] = useState<Partial<EditableResumeData>>({});
@@ -122,6 +123,35 @@ export default function DashboardPage() {
       setUserResume(null);
     }
   }, [resumes, resumesLoading]);
+
+  // Silently sync temp email → real email after resume loads (WAHA flow)
+  // Runs once per session when a resume with a temp email is detected
+  useEffect(() => {
+    if (!currentUser?.id || !userResume || emailSyncedRef.current) return;
+
+    const isTempEmail = userResume.email?.endsWith('@wa.chefdhundo.com') ?? false;
+    if (!isTempEmail) return; // Already a real email — nothing to do
+
+    emailSyncedRef.current = true; // Prevent duplicate calls
+    console.log('📧 Dashboard: Temp email detected, syncing to real email...');
+
+    fetch('/api/resumes/sync-email', { method: 'POST' })
+      .then(res => res.json())
+      .then(result => {
+        if (result.success && result.updated && result.resume) {
+          console.log('📧 Dashboard: Email synced successfully →', result.resume.email);
+          setUserResume(result.resume); // Update UI immediately
+          fetchResumesByUserId(currentUser.id); // Refresh store in background
+        } else {
+          console.log('ℹ️ Dashboard: Sync-email skipped:', result.message);
+        }
+      })
+      .catch(err => {
+        emailSyncedRef.current = false; // Allow retry on next render if it failed
+        console.error('❌ Dashboard: Email sync request failed:', err);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id, userResume?.id]);
 
 
   const handleStartEditing = () => {

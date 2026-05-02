@@ -79,13 +79,26 @@ export async function POST(request: NextRequest) {
 
     const supabaseUserId = userResult.data.id
 
-    // CLAIM STEP 2: Update resume using claim_token to ensure correct WHERE clause
+    // CLAIM STEP 2: Build update payload — replace temp email if present
+    const existingEmail = existingResume.email as string | null
+    const isTempEmail = existingEmail?.endsWith('@wa.chefdhundo.com') ?? false
+    const realEmail = userResult.data.email ?? null
+
+    const claimPayload: Record<string, unknown> = {
+      claimed: true,
+      user_id: supabaseUserId,
+    }
+
+    if (isTempEmail && realEmail) {
+      claimPayload.email = realEmail
+      console.log(`📧 Claim: Replacing temp email [${existingEmail}] with real email [${realEmail}]`)
+    } else {
+      console.log(`📧 Claim: Email not replaced — isTempEmail=${isTempEmail}, hasRealEmail=${!!realEmail}`)
+    }
+
     const { data: updatedResume, error: updateError } = await supabaseAdmin
       .from('resumes')
-      .update({
-        claimed: true,
-        user_id: supabaseUserId
-      })
+      .update(claimPayload)
       .eq('claim_token', token)
       .select()
       .single()
