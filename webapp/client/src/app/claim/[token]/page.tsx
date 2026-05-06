@@ -186,8 +186,7 @@ export default function ClaimPage() {
                 */}
                 <SignInButton
                   mode="redirect"
-                  afterSignUpUrl={claimPageUrl}
-                  afterSignInUrl={claimPageUrl}
+                  forceRedirectUrl={claimPageUrl}
                 >
                   <button className="w-full bg-orange-500 text-white px-6 py-2 rounded-lg hover:bg-orange-600 transition-colors">
                     Sign Up &amp; Claim
