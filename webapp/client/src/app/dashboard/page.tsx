@@ -57,7 +57,7 @@ type ResumeEditableKey = keyof EditableResumeData & keyof Resume;
 export default function DashboardPage() {
   const router = useRouter();
   const { user: clerkUser } = useUser();
-  const { findAndSetCurrentUserByClerkId, currentUser, isLoading: userLoading, error: userError } = useSupabaseUserStore();
+  const { findAndSetCurrentUserByClerkId, clearCurrentUser, currentUser, isLoading: userLoading, error: userError } = useSupabaseUserStore();
   const { fetchResumesByUserId, resumes, updateResume, isLoading: resumesLoading, error: resumesError } = useSupabaseResumeStore();
   const emailSyncedRef = useRef(false);
   const [userResume, setUserResume] = useState<Resume | null>(null);
@@ -67,6 +67,7 @@ export default function DashboardPage() {
   const [successMessage, setSuccessMessage] = useState<string>('');
   const [hasChanges, setHasChanges] = useState(false);
   const hasFetchedResumes = useRef(false);
+  const [isProcessingClaim, setIsProcessingClaim] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // File upload state
@@ -99,6 +100,15 @@ export default function DashboardPage() {
   // Fetch user's resumes when current user is found
   useEffect(() => {
     if (currentUser?.id && !hasFetchedResumes.current) {
+      // If there's a pending claim token, wait for the claim process to finish fetching
+      // to avoid race conditions where fetch runs before claim completes.
+      const pendingToken = localStorage.getItem('claim_token');
+      if (pendingToken) {
+        console.log("⏳ Dashboard: Claim token found, deferring initial resume fetch...");
+        setIsProcessingClaim(true);
+        return;
+      }
+
       console.log("CURRENT USER ID:", currentUser?.id)
       console.log("FETCHING RESUME WITH user_id")
       hasFetchedResumes.current = true;
@@ -153,6 +163,62 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.id, userResume?.id]);
 
+  // Silently check for pending claim token from OAuth redirect.
+  // This fires once when currentUser.id is first available.
+  useEffect(() => {
+    if (!currentUser?.id || !clerkUser?.id) return;
+
+    const token = localStorage.getItem('claim_token');
+    if (!token) return;
+
+    // Remove immediately to prevent double-firing on re-renders.
+    localStorage.removeItem('claim_token');
+    setIsProcessingClaim(true);
+
+    console.log('🔄 Dashboard: Found pending claim token, processing claim...');
+
+    let claimSucceeded = false;
+    
+    fetch('/api/resumes/claim', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ token }),
+    })
+      .then(res => res.json())
+      .then(result => {
+        if (result.success) {
+          console.log('✅ Dashboard: Resume claimed successfully via pending token.');
+          toast.success('Resume claimed successfully!');
+          claimSucceeded = true;
+        } else {
+          console.error('❌ Dashboard: Failed to claim via pending token:', result.error);
+          toast.error(result.error || 'Failed to claim resume');
+        }
+      })
+      .catch(err => {
+        console.error('❌ Dashboard: Error claiming via pending token:', err);
+      })
+      .finally(async () => {
+        // After claim (success or failure), always fetch resumes.
+        // If claim succeeded, also re-fetch the Supabase user to pick up
+        // the chef='yes' flag that the claim API just wrote, so the dashboard
+        // renders the resume editor instead of the basic info panel.
+        if (claimSucceeded && clerkUser?.id) {
+          console.log('🔄 Dashboard: Claim succeeded — re-fetching Supabase user to pick up chef=yes...');
+          // Clear cached user so findAndSetCurrentUserByClerkId makes a fresh API call.
+          clearCurrentUser();
+          await findAndSetCurrentUserByClerkId(clerkUser.id);
+          console.log('✅ Dashboard: Supabase user re-fetched after claim.');
+        }
+        hasFetchedResumes.current = true;
+        await fetchResumesByUserId(currentUser.id);
+        setIsProcessingClaim(false);
+      });
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id]);
 
   const handleStartEditing = () => {
     if (userResume) {
@@ -519,10 +585,13 @@ export default function DashboardPage() {
     );
   };
 
-  if (userLoading || (resumesLoading && !userResume)) {
+  if (userLoading || (resumesLoading && !userResume) || isProcessingClaim) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-lg">Loading...</div>
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50">
+        <Loader2 className="w-10 h-10 animate-spin text-orange-600 mb-4" />
+        <div className="text-lg text-gray-700">
+          {isProcessingClaim ? 'Processing your claim...' : 'Loading your dashboard...'}
+        </div>
       </div>
     );
   }

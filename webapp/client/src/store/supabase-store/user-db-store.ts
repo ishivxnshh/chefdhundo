@@ -177,62 +177,64 @@ export const useSupabaseUserStore = create<UserSupabaseState>((set, get) => ({
 
   // Find and set current user by comparing Clerk ID with Supabase users
   findAndSetCurrentUserByClerkId: async (clerkId: string) => {
-    const state = get()
-    
-    // Prevent multiple calls for the same clerk ID
-    if (state.isLoading || state.lastFetchedClerkId === clerkId) {
-      return state.currentUser
-    }
-
-    try {
-      set({ isLoading: true, error: null, lastFetchedClerkId: clerkId })
+    return deduplicate(`find-user-${clerkId}`, async () => {
+      const state = get()
       
-      const response = await fetch(`/api/user-supabase?clerk_id=${clerkId}`)
-      if (!response.ok && response.status === 401) {
-        set({ currentUser: null, isLoading: false, isUserLoaded: true, error: 'Unauthorized' })
-        return null
+      // Prevent multiple calls for the same clerk ID
+      if (state.lastFetchedClerkId === clerkId && state.isUserLoaded) {
+        return state.currentUser
       }
-      const result = await response.json()
-      
-      if (result.success && result.data) {
-        const foundUser = result.data
-        console.log('🔍 User Store: Found user data:', foundUser)
-        console.log('🔍 User Store: User ID for resume search:', foundUser.id)
+
+      try {
+        set({ isLoading: true, error: null, lastFetchedClerkId: clerkId })
         
-        set({ 
-          currentUser: foundUser, 
-          isLoading: false, 
-          isUserLoaded: true,
-          error: null 
-        })
+        const response = await fetch(`/api/user-supabase?clerk_id=${clerkId}`)
+        if (!response.ok && response.status === 401) {
+          set({ currentUser: null, isLoading: false, isUserLoaded: true, error: 'Unauthorized' })
+          return null
+        }
+        const result = await response.json()
         
-        return foundUser
-      } else {
-        const backendError = typeof result.error === 'string' ? result.error : null
-        const backendWarning = result.schemaReady === false
-          ? (typeof result.message === 'string' ? result.message : 'Database schema is not ready. Please verify Supabase tables and permissions.')
-          : null
+        if (result.success && result.data) {
+          const foundUser = result.data
+          console.log('🔍 User Store: Found user data:', foundUser)
+          console.log('🔍 User Store: User ID for resume search:', foundUser.id)
+          
+          set({ 
+            currentUser: foundUser, 
+            isLoading: false, 
+            isUserLoaded: true,
+            error: null 
+          })
+          
+          return foundUser
+        } else {
+          const backendError = typeof result.error === 'string' ? result.error : null
+          const backendWarning = result.schemaReady === false
+            ? (typeof result.message === 'string' ? result.message : 'Database schema is not ready. Please verify Supabase tables and permissions.')
+            : null
+          set({ 
+            currentUser: null, 
+            isLoading: false, 
+            isUserLoaded: true,
+            error: backendWarning || (isNotFoundMessage(backendError) ? null : backendError)
+          })
+          
+          return null
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+        
         set({ 
           currentUser: null, 
           isLoading: false, 
           isUserLoaded: true,
-          error: backendWarning || (isNotFoundMessage(backendError) ? null : backendError)
+          error: errorMessage 
         })
         
         return null
       }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      
-      set({ 
-        currentUser: null, 
-        isLoading: false, 
-        isUserLoaded: true,
-        error: errorMessage 
-      })
-      
-      return null
-    }
+    });
   },
 
   // Create user from Clerk data if not found in Supabase
