@@ -239,20 +239,28 @@ export async function getAllChefs(): Promise<ApiResponse<User[]>> {
  */
 export async function createResume(resumeData: ResumeInsert): Promise<ApiResponse<Resume>> {
   try {
+    // 🔥 DEBUG: Log resume details before insert
+    console.log('💾 Database: Creating resume')
+    console.log('  📝 Resume name:', resumeData.name)
+    console.log('  👤 Resume user_id:', resumeData.user_id)
+    console.log('  ✔️ Resume claimed:', resumeData.claimed)
+    console.log('  🎫 Resume claim_token:', resumeData.claim_token)
+
     const { data, error } = await supabaseAdmin
       .from('resumes')
-      .upsert(resumeData, { onConflict: 'user_id' })
+      .insert([resumeData])   // ✅ FIXED (NO UPSERT)
       .select()
       .single()
 
     if (error) {
-      console.error('Error creating resume:', error)
+      console.error('❌ Error creating resume:', error)
       return { success: false, error: error.message }
     }
 
+    console.log('✅ Database: Resume created successfully with ID:', data.id, 'user_id:', data.user_id)
     return { success: true, data }
   } catch (error) {
-    console.error('Unexpected error creating resume:', error)
+    console.error('❌ Unexpected error creating resume:', error)
     return { success: false, error: 'Failed to create resume' }
   }
 }
@@ -298,6 +306,34 @@ export async function getResumesByUserId(userId: string): Promise<ApiResponse<Re
   } catch (error) {
     console.error('Unexpected error fetching resumes:', error)
     return { success: false, error: 'Failed to fetch resumes' }
+  }
+}
+
+/**
+ * Get the latest resume by phone number (used for WhatsApp duplicate check)
+ */
+export async function getResumeByPhone(phone: string): Promise<ApiResponse<Resume>> {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('resumes')
+      .select('*')
+      .eq('phone', phone)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    if (!data) {
+      return { success: false, error: 'No resume found for this phone number' }
+    }
+
+    return { success: true, data }
+  } catch (error) {
+    console.error('❌ Unexpected error fetching resume by phone:', error)
+    return { success: false, error: 'Failed to fetch resume by phone' }
   }
 }
 
