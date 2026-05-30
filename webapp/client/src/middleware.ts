@@ -1,52 +1,120 @@
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from "next/server";
 
-const isDashboardRoute = createRouteMatcher(['/dashboard(.*)']);
-const isAdminRoute = createRouteMatcher(['/admin(.*)']);
+type SessionPayload = {
+  sub: string;
+  role: "basic" | "pro" | "admin";
+  phone: string;
+};
 
-function getRoleFromClaims(sessionClaims: unknown): string {
-  const claims = sessionClaims as
-    | {
-        metadata?: { role?: string };
-        publicMetadata?: { role?: string };
-        role?: string;
-      }
-    | undefined;
+const protectedPrefixes = ["/dashboard", "/admin"];
+const adminPrefixes = ["/admin", "/api/admin"];
+const authCookieName = "chef_auth";
 
-  return (
-    claims?.metadata?.role ||
-    claims?.publicMetadata?.role ||
-    claims?.role ||
-    'user'
-  );
+function base64UrlToUint8Array(base64Url: string) {
+  const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
 }
 
-export default clerkMiddleware(async (auth, req) => {
-  if (isDashboardRoute(req) || isAdminRoute(req)) {
-    await auth.protect({
-      unauthenticatedUrl: new URL('/sign-in', req.url).toString(),
-    });
+function safeJsonParse<T>(value: string): T | null {
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return null;
+  }
+}
+
+async function verifyHs256Jwt(token: string, secret: string): Promise<SessionPayload | null> {
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+
+  const [headerPart, payloadPart, signaturePart] = parts;
+  const header = safeJsonParse<{ alg?: string }>(
+    new TextDecoder().decode(base64UrlToUint8Array(headerPart))
+  );
+  if (!header || header.alg !== "HS256") return null;
+
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["verify"]
+  );
+
+  const valid = await crypto.subtle.verify(
+    "HMAC",
+    key,
+    base64UrlToUint8Array(signaturePart),
+    new TextEncoder().encode(`${headerPart}.${payloadPart}`)
+  );
+
+  if (!valid) return null;
+
+  const payload = safeJsonParse<SessionPayload & { exp?: number }>(
+    new TextDecoder().decode(base64UrlToUint8Array(payloadPart))
+  );
+
+  if (!payload || !payload.sub || !payload.phone || !payload.role) {
+    return null;
   }
 
-  if (isAdminRoute(req)) {
-    const { sessionClaims } = await auth();
-    const role = getRoleFromClaims(sessionClaims);
+  if (typeof payload.exp === "number") {
+    const now = Math.floor(Date.now() / 1000);
+    if (payload.exp < now) return null;
+  }
 
-    if (role !== 'admin') {
-      if (req.nextUrl.pathname.startsWith('/api/')) {
-        return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
-      }
+  return { sub: payload.sub, role: payload.role, phone: payload.phone };
+}
 
-      return NextResponse.redirect(new URL('/dashboard', req.url));
+async function readSession(req: NextRequest): Promise<SessionPayload | null> {
+  const token = req.cookies.get(authCookieName)?.value;
+  if (!token) return null;
+
+  const secret = process.env.AUTH_SECRET;
+  if (!secret) return null;
+
+  return verifyHs256Jwt(token, secret);
+}
+
+function isPathProtected(pathname: string) {
+  return protectedPrefixes.some((prefix) => pathname.startsWith(prefix));
+}
+
+function isAdminPath(pathname: string) {
+  return adminPrefixes.some((prefix) => pathname.startsWith(prefix));
+}
+
+export default async function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+
+  if (!isPathProtected(pathname) && !isAdminPath(pathname)) {
+    return NextResponse.next();
+  }
+
+  const session = await readSession(req);
+  if (!session) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
+    return NextResponse.redirect(new URL("/sign-in", req.url));
+  }
+
+  if (isAdminPath(pathname) && session.role !== "admin") {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
+    return NextResponse.redirect(new URL("/dashboard", req.url));
   }
 
   return NextResponse.next();
-});
+}
 
 export const config = {
-  matcher: [
-    '/((?!_next|.*\\..*).*)',
-    '/(api|trpc)(.*)',
-  ],
+  matcher: ["/((?!_next|.*\\..*).*)", "/(api|trpc)(.*)"],
 };

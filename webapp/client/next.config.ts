@@ -20,6 +20,9 @@ const cspHeader = [
 ].join('; ');
 
 const nextConfig: NextConfig = {
+  turbopack: {
+    root: __dirname,
+  },
   compiler: {
     // Remove console.logs in production (keep error and warn)
     removeConsole: process.env.NODE_ENV === 'production' ? {

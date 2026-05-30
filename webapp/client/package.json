@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
-    "lint:fix": "eslint . --ext .js,.jsx,.ts,.tsx --fix"
+    "lint:fix": "eslint . --ext .js,.jsx,.ts,.tsx --fix",
+    "test:otp": "node ./scripts/test-otp-flow.mjs"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.23.1",
@@ -24,6 +25,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "html2canvas": "^1.4.1",
+    "jose": "^6.2.3",
     "jspdf": "^4.2.1",
     "lucide-react": "^0.522.0",
     "motion": "^12.18.1",

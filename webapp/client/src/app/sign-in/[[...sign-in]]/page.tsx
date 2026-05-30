@@ -1,81 +1,148 @@
-'use client'
+"use client";
 
-import { SignIn } from '@clerk/nextjs'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 export default function SignInPage() {
-  const [isLoading, setIsLoading] = useState(true)
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [phone, setPhone] = useState("");
+  const [otp, setOtp] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+  const [cooldown, setCooldown] = useState(0);
 
   useEffect(() => {
-    // Show loading for a brief moment while Clerk initializes
-    const timer = setTimeout(() => setIsLoading(false), 800)
-    return () => clearTimeout(timer)
-  }, [])
+    if (cooldown <= 0) return;
+    const timer = setTimeout(() => setCooldown((v) => v - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [cooldown]);
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-gray-50 to-gray-100">
-        <div className="w-full max-w-md space-y-8 p-8">
-          {/* Logo Skeleton */}
-          <div className="flex justify-center">
-            <div className="w-16 h-16 bg-gray-200 rounded-full animate-pulse" />
-          </div>
+  const helperText = useMemo(() => {
+    if (cooldown > 0) return `Resend OTP in ${cooldown}s`;
+    return "Enter your Indian mobile number";
+  }, [cooldown]);
 
-          {/* Title Skeleton */}
-          <div className="space-y-3">
-            <div className="h-8 bg-gray-200 rounded-lg w-3/4 mx-auto animate-pulse" />
-            <div className="h-4 bg-gray-200 rounded-lg w-1/2 mx-auto animate-pulse" />
-          </div>
+  async function sendOtp() {
+    setLoading(true);
+    setMessage("");
 
-          {/* Form Skeletons */}
-          <div className="space-y-4 mt-8">
-            <div className="space-y-2">
-              <div className="h-4 bg-gray-200 rounded w-1/4 animate-pulse" />
-              <div className="h-12 bg-gray-200 rounded-lg animate-pulse" />
-            </div>
-            <div className="space-y-2">
-              <div className="h-4 bg-gray-200 rounded w-1/4 animate-pulse" />
-              <div className="h-12 bg-gray-200 rounded-lg animate-pulse" />
-            </div>
-            <div className="h-12 bg-gray-300 rounded-lg animate-pulse mt-6" />
-          </div>
+    try {
+      const res = await fetch("/api/auth/request-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setMessage(data.error || "Could not send OTP");
+        return;
+      }
 
-          {/* Social Login Skeletons */}
-          <div className="space-y-3 mt-6">
-            <div className="h-12 bg-gray-200 rounded-lg animate-pulse" />
-            <div className="h-12 bg-gray-200 rounded-lg animate-pulse" />
-          </div>
+      setOtpSent(true);
+      setCooldown(60);
+      setMessage("OTP sent to your mobile number");
+    } catch {
+      setMessage("Could not send OTP");
+    } finally {
+      setLoading(false);
+    }
+  }
 
-          {/* Footer Skeleton */}
-          <div className="flex justify-center mt-6">
-            <div className="h-4 bg-gray-200 rounded w-2/3 animate-pulse" />
-          </div>
-        </div>
-      </div>
-    )
+  async function verifyOtpCode() {
+    setLoading(true);
+    setMessage("");
+
+    try {
+      const res = await fetch("/api/auth/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone, otp }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setMessage(data.error || "Invalid OTP");
+        return;
+      }
+
+      const nextPath = searchParams.get("next") || "/dashboard";
+      router.push(nextPath);
+    } catch {
+      setMessage("Could not verify OTP");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-gray-50 to-gray-100 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="w-full max-w-md">
-        <SignIn 
-          appearance={{
-            elements: {
-              formButtonPrimary: 'bg-black hover:bg-gray-800 text-sm normal-case',
-              card: 'shadow-xl',
-              headerTitle: 'text-2xl font-bold',
-              headerSubtitle: 'text-gray-600',
-              socialButtonsBlockButton: 'border-gray-300 hover:bg-gray-50',
-              formFieldInput: 'border-gray-300 focus:border-black focus:ring-black',
-              footerActionLink: 'text-black hover:text-gray-700'
-            }
-          }}
-          routing="path"
-          path="/sign-in"
-          signUpUrl="/sign-up"
-          fallbackRedirectUrl="/dashboard"
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8">
+        <h1 className="text-2xl font-bold text-center mb-2">Login with Mobile OTP</h1>
+        <p className="text-sm text-gray-500 text-center mb-6">{helperText}</p>
+
+        <label className="block text-sm font-medium mb-2">Mobile Number</label>
+        <input
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          placeholder="9876543210"
+          className="w-full border rounded-lg px-4 py-3 mb-4"
+          disabled={otpSent}
         />
+
+        {otpSent && (
+          <>
+            <label className="block text-sm font-medium mb-2">OTP</label>
+            <input
+              value={otp}
+              onChange={(e) => setOtp(e.target.value)}
+              placeholder="Enter 6 digit OTP"
+              className="w-full border rounded-lg px-4 py-3 mb-2"
+              maxLength={6}
+            />
+          </>
+        )}
+
+        {message && (
+          <p
+            className={`text-sm text-center mb-4 ${
+              message.includes("sent") ? "text-green-700" : "text-red-600"
+            }`}
+          >
+            {message}
+          </p>
+        )}
+
+        {!otpSent ? (
+          <button
+            type="button"
+            onClick={sendOtp}
+            disabled={loading}
+            className="w-full bg-black text-white rounded-lg py-3 disabled:opacity-60"
+          >
+            {loading ? "Sending..." : "Send OTP"}
+          </button>
+        ) : (
+          <div className="space-y-3">
+            <button
+              type="button"
+              onClick={verifyOtpCode}
+              disabled={loading}
+              className="w-full bg-black text-white rounded-lg py-3 disabled:opacity-60"
+            >
+              {loading ? "Verifying..." : "Login"}
+            </button>
+            <button
+              type="button"
+              onClick={sendOtp}
+              disabled={loading || cooldown > 0}
+              className="w-full border border-gray-300 text-gray-700 rounded-lg py-3 disabled:opacity-60"
+            >
+              {cooldown > 0 ? `Resend in ${cooldown}s` : "Resend OTP"}
+            </button>
+          </div>
+        )}
       </div>
     </div>
-  )
+  );
 }
