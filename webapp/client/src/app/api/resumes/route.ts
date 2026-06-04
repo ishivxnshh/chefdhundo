@@ -1,16 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getAllResumes, getAllResumesPaginated, createResume, getResumesByUserId, getUserByClerkId } from '@/lib/supabase/database'
-import { ResumeInsert } from '@/types/supabase'
+import { Resume, ResumeInsert } from '@/types/supabase'
 import { generateToken } from "@/lib/generateToken"
 
-function isMissingResumesTableError(error: any): boolean {
-  const normalized = String(error?.message || '').toLowerCase()
+function errorMessage(error: unknown): string {
+  if (error && typeof error === 'object' && 'message' in error) {
+    return String((error as { message?: unknown }).message || '')
+  }
+  return String(error || '')
+}
+
+function isMissingResumesTableError(error: unknown): boolean {
+  const normalized = errorMessage(error).toLowerCase()
   return normalized.includes('no rows found') || normalized.includes('does not exist')
 }
 
-function isResumesPermissionError(error: any): boolean {
-  const normalized = String(error?.message || '').toLowerCase()
+function isResumesPermissionError(error: unknown): boolean {
+  const normalized = errorMessage(error).toLowerCase()
   return normalized.includes('permission denied') && normalized.includes('resumes')
 }
 
@@ -26,37 +33,44 @@ function getRoleFromClaims(sessionClaims: unknown): string {
   return claims?.metadata?.role || claims?.publicMetadata?.role || claims?.role || 'user'
 }
 
-// --- Safe Enum Validators ---
-function safeGender(value: unknown): 'Male' | 'Female' | 'Other' | 'Prefer not to say' | null {
-  const allowed = ["Male", "Female", "Other", "Prefer not to say"]
-  const strVal = typeof value === 'string' ? value : ''
-  return allowed.includes(strVal) ? (strVal as any) : null
+function safeEnum<const T extends readonly string[]>(
+  value: unknown,
+  allowed: T
+): T[number] | null {
+  return typeof value === 'string' && allowed.includes(value)
+    ? (value as T[number])
+    : null
 }
 
 function safeTraining(value: unknown): 'yes' | 'no' | 'try' | null {
-  const allowed = ["yes", "no", "try"]
-  const strVal = typeof value === 'string' ? value : ''
-  return allowed.includes(strVal) ? (strVal as any) : null
+  return safeEnum(value, ['yes', 'no', 'try'] as const)
 }
 
 function safeWorkType(value: unknown): 'full' | 'part' | 'contract' | null {
-  const allowed = ["full", "part", "contract"]
-  const strVal = typeof value === 'string' ? value : ''
-  return allowed.includes(strVal) ? (strVal as any) : null
+  return safeEnum(value, ['full', 'part', 'contract'] as const)
 }
 
 function safeJoining(value: unknown): 'immediate' | 'specific' | null {
-  const allowed = ["immediate", "specific"]
-  const strVal = typeof value === 'string' ? value : ''
-  return allowed.includes(strVal) ? (strVal as any) : null
+  return safeEnum(value, ['immediate', 'specific'] as const)
 }
 
 function safeBusinessType(value: unknown): 'any' | 'new' | 'old' | null {
-  const allowed = ["any", "new", "old"]
-  const strVal = typeof value === 'string' ? value : ''
-  return allowed.includes(strVal) ? (strVal as any) : null
+  return safeEnum(value, ['any', 'new', 'old'] as const)
 }
-// ----------------------------
+
+function safeGender(value: unknown): 'Male' | 'Female' | 'Other' | 'Prefer not to say' | null {
+  return safeEnum(value, ['Male', 'Female', 'Other', 'Prefer not to say'] as const)
+}
+
+function withoutEmail(resume: Resume) {
+  const safeResume: Partial<Resume> = { ...resume }
+  delete safeResume.email
+  return safeResume
+}
+
+function withoutEmails(resumes: Resume[] | null | undefined) {
+  return (resumes || []).map(withoutEmail)
+}
 
 // Cache configuration
 const CACHE_MAX_AGE = 60 // 1 minute
@@ -137,7 +151,7 @@ export async function GET(request: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        data: result.data,
+        data: withoutEmails(result.data),
         message: `Found ${result.data?.length || 0} resumes for user`
       })
     } else {
@@ -201,7 +215,7 @@ export async function GET(request: NextRequest) {
 
         const response = NextResponse.json({
           success: true,
-          data: result.data,
+          data: withoutEmails(result.data),
           pagination: result.pagination,
           message: `Found ${result.pagination?.total || 0} resumes`
         })
@@ -246,7 +260,7 @@ export async function GET(request: NextRequest) {
 
         const response = NextResponse.json({
           success: true,
-          data: result.data,
+          data: withoutEmails(result.data),
           message: `Found ${result.data?.length || 0} resumes`
         })
 
@@ -407,7 +421,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: result.data,
+      data: result.data ? withoutEmail(result.data) : null,
       token: isWhatsapp ? result.data?.claim_token : null
     }, { status: 201 })
 

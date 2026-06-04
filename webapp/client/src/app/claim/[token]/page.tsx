@@ -49,7 +49,6 @@ interface ClaimResponse {
   data?: {
     id: string
     name: string
-    email: string
   }
 }
 
@@ -75,7 +74,7 @@ export default function ClaimPage() {
     }
   }, [token])
 
-  // When the user is signed in and Clerk has fully loaded, run the claim.
+  // When the user is signed in and mobile authentication has loaded, run the claim.
   useEffect(() => {
     if (!isLoaded) return
     if (!token) {
@@ -179,7 +178,7 @@ export default function ClaimPage() {
                 </p>
                 {/*
                   IMPORTANT: mode="redirect" (not "modal") so that after
-                  Clerk completes signup/login it redirects back to this
+                  mobile authentication completes it redirects back to this
                   same claim page with a fully established server-side
                   session.  The useEffect above will then fire with user
                   set and call handleClaimResume() successfully.

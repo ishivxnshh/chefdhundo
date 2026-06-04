@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { searchResumes } from '@/lib/supabase/database'
+import type { Resume } from '@/types/supabase'
 
 type ResumeSearchCriteria = Parameters<typeof searchResumes>[0]
+
+function withoutEmail(resume: Resume) {
+  const safeResume: Partial<Resume> = { ...resume }
+  delete safeResume.email
+  return safeResume
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -38,7 +45,7 @@ export async function GET(request: NextRequest) {
     if (result.success) {
       return NextResponse.json({
         success: true,
-        data: result.data,
+        data: (result.data || []).map(withoutEmail),
         message: `Found ${result.data?.length || 0} matching resumes`
       })
     } else {

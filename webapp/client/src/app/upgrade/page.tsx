@@ -5,8 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Check } from "lucide-react";
 import { toast } from "sonner";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import RazorpayPayment from "@/components/RazorpayPayment";
 
@@ -81,7 +79,7 @@ const plans = [
       "Priority support",
       "Resume downloads",
       "Advanced filters",
-      "Email notifications",
+      "SMS notifications",
     ],
     popular: true,
     savings: null,
@@ -101,7 +99,7 @@ const plans = [
       "Priority support",
       "Resume downloads",
       "Advanced filters",
-      "Email notifications",
+      "SMS notifications",
       "Bulk export",
       "Analytics dashboard",
     ],
@@ -123,7 +121,7 @@ const plans = [
       "Priority support",
       "Resume downloads",
       "Advanced filters",
-      "Email notifications",
+      "SMS notifications",
       "Bulk export",
       "Analytics dashboard",
       "API access",
@@ -136,7 +134,6 @@ const plans = [
 
 function UpgradePage() {
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
-  const [userPhone, setUserPhone] = useState<string>("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   const handlePlanSelect = (planId: string) => {
@@ -312,19 +309,6 @@ function UpgradePage() {
                     </DialogDescription>
                   </DialogHeader>
                   <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="phone">Phone Number</Label>
-                      <Input
-                        id="phone"
-                        placeholder="Enter your 10-digit phone number"
-                        value={userPhone}
-                        onChange={(e) =>
-                          setUserPhone(e.target.value.replace(/\D/g, ""))
-                        }
-                        type="tel"
-                        maxLength={10}
-                      />
-                    </div>
                     <Suspense fallback={<LoadingFallback />}>
                       <RazorpayPayment
                         amount={
@@ -335,11 +319,6 @@ function UpgradePage() {
                           plans.find((p) => p.id === selectedPlan)?.name || ""
                         }
                         planId={selectedPlan || ""}
-                        planDurationDays={
-                          plans.find((p) => p.id === selectedPlan)
-                            ?.durationDays || 7
-                        }
-                        customerPhone={userPhone || "9999999999"}
                         onSuccess={handlePaymentSuccess}
                         onFailure={handlePaymentFailure}
                       />
@@ -394,8 +373,7 @@ function UpgradePage() {
                       Direct Contact Access
                     </h3>
                     <p className="text-gray-600">
-                      Get full email addresses and phone numbers to contact
-                      chefs directly.
+                      Get full phone numbers to contact chefs directly.
                     </p>
                   </div>
                 </div>

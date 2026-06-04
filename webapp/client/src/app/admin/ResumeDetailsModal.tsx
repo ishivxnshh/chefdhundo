@@ -123,15 +123,7 @@ export default function ResumeDetailsModal({ resume, open, onClose, onResumeDele
                         onChange={(e) => updateField('name', e.target.value)}
                       />
                     </div>
-                    <div>
-                      <Label htmlFor="email">Email *</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        value={editedData.email || ''}
-                        onChange={(e) => updateField('email', e.target.value)}
-                      />
-                    </div>
+
                     <div>
                       <Label htmlFor="phone">Phone</Label>
                       <Input
@@ -167,7 +159,7 @@ export default function ResumeDetailsModal({ resume, open, onClose, onResumeDele
                 ) : (
                   <>
                     <div><span className="text-gray-600">Name:</span> <div className="font-medium">{resume.name}</div></div>
-                    <div><span className="text-gray-600">Email:</span> <div className="font-medium">{resume.email}</div></div>
+
                     <div><span className="text-gray-600">Phone:</span> <div className="font-medium">{resume.phone || '—'}</div></div>
                     <div><span className="text-gray-600">Age Range:</span> <div className="font-medium">{resume.age_range || '—'}</div></div>
                     <div><span className="text-gray-600">Gender:</span> <div className="font-medium">{resume.gender || '—'}</div></div>

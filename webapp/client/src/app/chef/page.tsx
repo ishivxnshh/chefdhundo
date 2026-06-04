@@ -3,14 +3,13 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Mail, Phone, MapPin } from 'lucide-react';
+import { ArrowLeft, Phone, MapPin } from 'lucide-react';
 import ResumeTemplate from '@/components/resumeTemplate';
 
 
 // TypeScript interface for the resume data
 interface ChefResumeData {
   name: string;
-  email: string;
   mobile: string;
   location: string;
   age?: number;
@@ -66,12 +65,10 @@ export default function ChefResumePage() {
     router.push('/findchefs');
   };
 
-  const handleContact = (type: 'email' | 'phone') => {
+  const handleContact = () => {
     if (!resumeData) return;
     
-    if (type === 'email' && resumeData.email) {
-      window.open(`mailto:${resumeData.email}`, '_blank');
-    } else if (type === 'phone' && resumeData.mobile) {
+    if (resumeData.mobile) {
       window.open(`tel:${resumeData.mobile}`, '_blank');
     }
   };
@@ -129,21 +126,9 @@ export default function ChefResumePage() {
 
             <div className="flex items-center gap-3">
               {/* Contact Actions */}
-              {resumeData.email && (
-                <Button
-                  onClick={() => handleContact('email')}
-                  variant="outline"
-                  size="sm"
-                  className="flex items-center gap-2"
-                >
-                  <Mail className="w-4 h-4" />
-                  Email
-                </Button>
-              )}
-              
               {resumeData.mobile && (
                 <Button
-                  onClick={() => handleContact('phone')}
+                  onClick={handleContact}
                   variant="outline"
                   size="sm"
                   className="flex items-center gap-2"
@@ -226,13 +211,13 @@ export default function ChefResumePage() {
                   Back to Search
                 </Button>
                 
-                {resumeData.email && (
+                {resumeData.mobile && (
                   <Button
-                    onClick={() => handleContact('email')}
+                    onClick={handleContact}
                     className="bg-amber-600 hover:bg-amber-700 px-6"
                   >
-                    <Mail className="w-4 h-4 mr-2" />
-                    Send Email
+                    <Phone className="w-4 h-4 mr-2" />
+                    Call Candidate
                   </Button>
                 )}
               </div>

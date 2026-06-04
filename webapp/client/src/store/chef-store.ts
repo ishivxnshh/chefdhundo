@@ -8,7 +8,6 @@ export type TrainingReadiness = 'yes' | 'no' | 'try';
 export interface ChefDetails {
   // Step 1 - Basic Information
   name: string;
-  email: string;
   location: string;
   age: number | '';
   mobile: string;
@@ -41,4 +40,4 @@ interface ChefStore {
 export const useChefStore = create<ChefStore>((set) => ({
   chefDetails: null,
   updateChefDetails: (details) => set({ chefDetails: details }),
-})); 
+}));

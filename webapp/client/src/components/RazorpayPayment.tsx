@@ -30,8 +30,6 @@ interface RazorpayPaymentProps {
   amount: number;
   planName: string;
   planId: string;
-  planDurationDays: number;
-  customerPhone?: string;
   onSuccess?: (response: RazorpaySuccessResponse) => void;
   onFailure?: (error: RazorpayFailureResponse | unknown) => void;
   disabled?: boolean;
@@ -46,7 +44,6 @@ interface RazorpayOrderResponse {
   amount: number;
   currency: string;
   customerName: string;
-  customerEmail: string;
   customerPhone: string;
   error?: string;
 }
@@ -62,8 +59,10 @@ interface RazorpayOptions {
   handler: (response: RazorpaySuccessResponse) => void;
   prefill: {
     name: string;
-    email: string;
     contact: string;
+  };
+  hidden: {
+    email: boolean;
   };
   notes: {
     address: string;
@@ -94,8 +93,6 @@ const RazorpayPayment: React.FC<RazorpayPaymentProps> = ({
   amount,
   planName,
   planId,
-  planDurationDays,
-  customerPhone,
   onSuccess,
   onFailure,
   disabled = false,
@@ -120,15 +117,7 @@ const RazorpayPayment: React.FC<RazorpayPaymentProps> = ({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          amount,
-          planName,
           planId,
-          planDurationDays,
-          userId: user.id,
-          customerName: user.fullName || user.firstName || "User",
-          customerEmail: user.primaryEmailAddress?.emailAddress || "",
-          customerPhone:
-            customerPhone || user.primaryPhoneNumber?.phoneNumber || "",
         }),
       });
 
@@ -184,8 +173,10 @@ const RazorpayPayment: React.FC<RazorpayPaymentProps> = ({
         },
         prefill: {
           name: data.customerName,
-          email: data.customerEmail,
           contact: data.customerPhone,
+        },
+        hidden: {
+          email: true,
         },
         notes: {
           address: "Chef Dhundo Corporate Office",

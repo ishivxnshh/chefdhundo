@@ -1,9 +1,19 @@
 import { NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
+import { getUserByClerkId } from '@/lib/supabase/database';
 import { createSupabaseAdminClient } from '@/lib/supabase/supabase';
 
 // Cache configuration for announcements
 const CACHE_MAX_AGE = 30 // 30 seconds for active announcements
 const STALE_WHILE_REVALIDATE = 120 // 2 minutes
+
+async function isAdminRequest() {
+  const { userId } = await auth();
+  if (!userId) return false;
+
+  const user = await getUserByClerkId(userId);
+  return user.success && user.data?.role === 'admin';
+}
 
 // GET /api/announcements - Get all announcements (with optional filters)
 export async function GET(request: Request) {
@@ -11,6 +21,13 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status') as 'active' | 'scheduled' | 'expired' | 'draft' | null; // Filter by status
     const activeOnly = searchParams.get('active') === 'true'; // Only get currently active ones
+
+    if (!activeOnly && !(await isAdminRequest())) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden' },
+        { status: 403 }
+      );
+    }
     
     const supabase = createSupabaseAdminClient();
     
@@ -72,6 +89,13 @@ export async function GET(request: Request) {
 // POST /api/announcements - Create new announcement (Admin only)
 export async function POST(request: Request) {
   try {
+    if (!(await isAdminRequest())) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden' },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
     
     // Validate required fields

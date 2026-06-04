@@ -9,8 +9,7 @@ import { Button } from '@/components/ui/button';
 import { 
   ChefHat, 
   MapPin, 
-  Phone, 
-  Mail, 
+  Phone,
   Calendar, 
   DollarSign, 
   Star,
@@ -88,7 +87,6 @@ export function ChefDashboard({ currentUser }: ChefDashboardProps) {
     if (currentUser) {
       console.log('👤 Current user data in ChefDashboard:', {
         name: currentUser.name,
-        email: currentUser.email,
         role: currentUser.role
       });
     }
@@ -225,10 +223,7 @@ export function ChefDashboard({ currentUser }: ChefDashboardProps) {
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-3">
-                        <div className="flex items-center gap-2 text-sm">
-                          <Mail className="w-4 h-4 text-gray-500" />
-                          <span className="truncate">{chef.email}</span>
-                        </div>
+
                         <div className="flex items-center gap-2 text-sm">
                           <Phone className="w-4 h-4 text-gray-500" />
                           <span>{chef.mobile}</span>
@@ -331,10 +326,7 @@ export function ChefDashboard({ currentUser }: ChefDashboardProps) {
                       <FileText className="w-4 h-4 mr-2" />
                       Download Resume
                     </Button>
-                    <Button variant="outline">
-                      <Mail className="w-4 h-4 mr-2" />
-                      Send Message
-                    </Button>
+
                   </div>
                 </CardContent>
               </Card>

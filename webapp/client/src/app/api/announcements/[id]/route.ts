@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
+import { getUserByClerkId } from '@/lib/supabase/database';
 import { createSupabaseAdminClient } from '@/lib/supabase/supabase';
 
 type AnnouncementRouteParams = {
@@ -9,12 +11,27 @@ type AnnouncementRouteContext = {
   params: Promise<AnnouncementRouteParams>;
 };
 
+async function isAdminRequest() {
+  const { userId } = await auth();
+  if (!userId) return false;
+
+  const user = await getUserByClerkId(userId);
+  return user.success && user.data?.role === 'admin';
+}
+
 // GET /api/announcements/[id] - Get single announcement
 export async function GET(
   request: NextRequest,
   context: AnnouncementRouteContext
 ) {
   try {
+    if (!(await isAdminRequest())) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden' },
+        { status: 403 }
+      );
+    }
+
     const params = await context.params;
     const rawId = params?.id;
     const announcementId = Array.isArray(rawId) ? rawId[0] : rawId;
@@ -61,6 +78,13 @@ export async function PUT(
   context: AnnouncementRouteContext
 ) {
   try {
+    if (!(await isAdminRequest())) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden' },
+        { status: 403 }
+      );
+    }
+
     const params = await context.params;
     const rawId = params?.id;
     const announcementId = Array.isArray(rawId) ? rawId[0] : rawId;
@@ -125,6 +149,13 @@ export async function DELETE(
   context: AnnouncementRouteContext
 ) {
   try {
+    if (!(await isAdminRequest())) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden' },
+        { status: 403 }
+      );
+    }
+
     const params = await context.params;
     const rawId = params?.id;
     const announcementId = Array.isArray(rawId) ? rawId[0] : rawId;

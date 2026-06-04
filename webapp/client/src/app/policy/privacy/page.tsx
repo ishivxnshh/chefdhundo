@@ -28,10 +28,10 @@ export default function PrivacyPolicy() {
             <h2 className="text-2xl font-semibold text-slate-800 mt-8 mb-4">Information we collect</h2>
             <p>We may collect the following categories of information:</p>
             <ul className="list-disc pl-6 space-y-2">
-              <li><strong>Candidate information:</strong> Name, contact details (phone number, email address), location, work experience, skills, resume/CV, portfolio links, and other details you provide while creating a profile or submitting your resume.</li>
+              <li><strong>Candidate information:</strong> Name, phone number, location, work experience, skills, resume/CV, portfolio links, and other details you provide while creating a profile or submitting your resume.</li>
               <li><strong>Employer information:</strong> Name, business name, contact details, job role, and any other information provided for posting jobs or contacting candidates.</li>
               <li><strong>Account and usage data:</strong> Login credentials (stored in secured form), IP address, device information, browser type, pages visited, time spent on pages, and other analytics data to improve our services.</li>
-              <li><strong>Communication data:</strong> Messages, emails, or other communications you send to us or through the Platform (for example, inquiries or feedback).</li>
+              <li><strong>Communication data:</strong> Messages or other communications you send to us or through the Platform (for example, inquiries or feedback).</li>
               <li><strong>Payment-related data:</strong> Limited information related to transactions processed via payment gateways such as Razorpay (e.g., transaction ID, payment status), but not your full card details, which are handled directly by the payment gateway.</li>
             </ul>
 
@@ -110,7 +110,7 @@ export default function PrivacyPolicy() {
             <h2 className="text-2xl font-semibold text-slate-800 mt-8 mb-4">Contact us</h2>
             <p>If you have any questions, concerns, or requests regarding this Privacy Policy or our handling of personal information, please contact us at:</p>
             <div className="bg-white/40 p-4 rounded-lg border border-white/50 not-prose">
-              <p className="font-medium text-slate-900">Email: <a href="mailto:contact@ihmgurukul.com" className="text-blue-600 hover:underline">contact@ihmgurukul.com</a></p>
+              <p className="font-medium text-slate-900">Phone: +91 8826147981</p>
               <p className="font-medium text-slate-900">Address: New Delhi, India</p>
             </div>
           </div>

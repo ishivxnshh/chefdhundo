@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
 import crypto from "crypto";
@@ -11,6 +12,14 @@ const supabase = createClient<Database>(
 
 export async function POST(request: NextRequest) {
   try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized." },
+        { status: 401 }
+      );
+    }
+
     const {
       razorpay_order_id,
       razorpay_payment_id,
@@ -53,7 +62,9 @@ export async function POST(request: NextRequest) {
     // Find the payment record using internal_order_id or razorpay_order_id
     let query = supabase.from("payments").select("*");
     if (internal_order_id) {
-      query = query.eq("order_id", internal_order_id);
+      query = query
+        .eq("order_id", internal_order_id)
+        .eq("razorpay_order_id", razorpay_order_id);
     } else {
       query = query.eq("razorpay_order_id", razorpay_order_id);
     }
@@ -65,6 +76,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: "Payment record not found." },
         { status: 404 }
+      );
+    }
+
+    const { data: userRecord, error: userError } = await supabase
+      .from("users")
+      .select("id")
+      .eq("clerk_user_id", userId)
+      .single();
+
+    if (userError || !userRecord || userRecord.id !== paymentData.user_id) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden." },
+        { status: 403 }
       );
     }
 

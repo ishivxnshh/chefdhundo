@@ -2,7 +2,6 @@ import { create } from 'zustand'
 
 interface ChatbotFormData {
   name: string
-  email: string
   phone: string
   subject: string
   message: string
@@ -19,7 +18,6 @@ interface ChatbotStore {
 
 const initialFormData: ChatbotFormData = {
   name: '',
-  email: '',
   phone: '',
   subject: '',
   message: ''

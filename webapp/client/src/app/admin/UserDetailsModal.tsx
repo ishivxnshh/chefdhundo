@@ -19,7 +19,7 @@ interface UserDetailsModalProps {
 }
 
 export default function UserDetailsModal({ user, open, onClose, onUserDeleted }: UserDetailsModalProps) {
-  const { updateUserById, deleteUser, updateChefStatus } = useSupabaseUserStore()
+  const { updateUser, updateUserById, deleteUser, updateChefStatus } = useSupabaseUserStore()
   
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -27,13 +27,11 @@ export default function UserDetailsModal({ user, open, onClose, onUserDeleted }:
   const [isDeleting, setIsDeleting] = useState(false)
   
   const [editedName, setEditedName] = useState('')
-  const [editedEmail, setEditedEmail] = useState('')
   const [editedPhoto, setEditedPhoto] = useState('')
 
   useEffect(() => {
     if (user) {
       setEditedName(user.name || '')
-      setEditedEmail(user.email || '')
       setEditedPhoto(user.photo || '')
       setIsEditing(false)
       setShowDeleteConfirm(false)
@@ -45,9 +43,8 @@ export default function UserDetailsModal({ user, open, onClose, onUserDeleted }:
   const handleSave = async () => {
     try {
       setIsSaving(true)
-      await updateUserById(user.id, {
+      await updateUser(user.clerk_user_id, {
         name: editedName,
-        email: editedEmail,
         photo: editedPhoto || null
       })
       toast.success('User updated successfully')
@@ -97,12 +94,6 @@ export default function UserDetailsModal({ user, open, onClose, onUserDeleted }:
     }
   }
 
-  const handlePasswordChange = () => {
-    // Redirect to Clerk user management
-    window.open('https://accounts.clerk.dev/user', '_blank')
-    toast.info('Redirected to Clerk for password management')
-  }
-
   return (
     <>
       <Dialog open={open && !showDeleteConfirm} onOpenChange={(open) => !open && onClose()}>
@@ -113,8 +104,8 @@ export default function UserDetailsModal({ user, open, onClose, onUserDeleted }:
                 <Image src={user.photo} alt={user.name} width={48} height={48} className="w-12 h-12 rounded-full object-cover" />
               )}
               <div>
-                <div>{user.name || 'Unnamed User'}</div>
-                <div className="text-sm font-normal text-gray-500">{user.email}</div>
+                <div>{user.name || user.clerk_user_id.replace('phone:', '')}</div>
+                <div className="text-sm font-normal text-gray-500">{user.clerk_user_id.replace('phone:', '')}</div>
               </div>
             </DialogTitle>
             <DialogDescription>
@@ -136,7 +127,6 @@ export default function UserDetailsModal({ user, open, onClose, onUserDeleted }:
                     <Button variant="outline" size="sm" onClick={() => {
                       setIsEditing(false)
                       setEditedName(user.name || '')
-                      setEditedEmail(user.email || '')
                       setEditedPhoto(user.photo || '')
                     }}>
                       Cancel
@@ -159,16 +149,7 @@ export default function UserDetailsModal({ user, open, onClose, onUserDeleted }:
                       placeholder="Enter name"
                     />
                   </div>
-                  <div>
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={editedEmail}
-                      onChange={(e) => setEditedEmail(e.target.value)}
-                      placeholder="Enter email"
-                    />
-                  </div>
+
                   <div>
                     <Label htmlFor="photo">Photo URL</Label>
                     <Input
@@ -186,15 +167,15 @@ export default function UserDetailsModal({ user, open, onClose, onUserDeleted }:
                     <div className="font-medium">{user.name || '—'}</div>
                   </div>
                   <div>
-                    <span className="text-gray-600">Email:</span>
-                    <div className="font-medium">{user.email || '—'}</div>
+                    <span className="text-gray-600">Mobile:</span>
+                    <div className="font-medium">{user.clerk_user_id.replace('phone:', '')}</div>
                   </div>
                   <div>
                     <span className="text-gray-600">User ID:</span>
                     <div className="font-mono text-xs">{user.id}</div>
                   </div>
                   <div>
-                    <span className="text-gray-600">Clerk ID:</span>
+                    <span className="text-gray-600">Session ID:</span>
                     <div className="font-mono text-xs">{user.clerk_user_id}</div>
                   </div>
                   <div>
@@ -287,14 +268,6 @@ export default function UserDetailsModal({ user, open, onClose, onUserDeleted }:
                       className="justify-start"
                     >
                       Toggle Chef Status
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={handlePasswordChange}
-                      className="justify-start"
-                    >
-                      Change Password
                     </Button>
                     <Button 
                       variant="destructive" 

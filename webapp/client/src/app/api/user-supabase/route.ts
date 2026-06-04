@@ -9,6 +9,20 @@ import {
 import type { UserUpdate } from '@/types/supabase'
 import { ClerkUserData } from '@/types/supabase'
 import { ensureUserForPhone, syntheticIdToPhone } from '@/lib/auth/server'
+import { auth } from '@clerk/nextjs/server'
+
+async function authorizeUserTarget(targetUserId: string) {
+  const { userId } = await auth()
+  if (!userId) return { allowed: false, isAdmin: false }
+
+  if (userId === targetUserId) {
+    return { allowed: true, isAdmin: false }
+  }
+
+  const requester = await getUserByClerkId(userId)
+  const isAdmin = requester.success && requester.data?.role === 'admin'
+  return { allowed: isAdmin || userId === targetUserId, isAdmin }
+}
 
 function isMissingUsersTableError(error: string | undefined): boolean {
   if (!error) return false
@@ -32,6 +46,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'clerk_id is required' },
         { status: 400 }
+      )
+    }
+
+    const authorization = await authorizeUserTarget(clerkId)
+    if (!authorization.allowed) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden' },
+        { status: 403 }
       )
     }
 
@@ -102,6 +124,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'clerk_user_id, name, and email are required' },
         { status: 400 }
+      )
+    }
+
+    const authorization = await authorizeUserTarget(clerk_user_id)
+    if (!authorization.allowed) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden' },
+        { status: 403 }
       )
     }
 
@@ -214,6 +244,26 @@ export async function PUT(request: NextRequest) {
         { success: false, error: 'clerk_user_id is required' },
         { status: 400 }
       )
+    }
+
+    const authorization = await authorizeUserTarget(clerk_user_id)
+    if (!authorization.allowed) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden' },
+        { status: 403 }
+      )
+    }
+
+    if (!authorization.isAdmin) {
+      const allowedSelfUpdates = new Set(['name', 'photo', 'chef'])
+      for (const key of Object.keys(updates)) {
+        if (!allowedSelfUpdates.has(key)) {
+          return NextResponse.json(
+            { success: false, error: 'Forbidden update field' },
+            { status: 403 }
+          )
+        }
+      }
     }
 
     const result = await updateUser(clerk_user_id, updates)

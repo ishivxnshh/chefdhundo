@@ -152,7 +152,7 @@ function PaymentSuccessContent() {
                   </div>
                   <h4 className="font-semibold text-gray-900 mb-2">Direct Contact</h4>
                   <p className="text-sm text-gray-600">
-                    Reach out to chefs directly via email and phone
+                    Reach out to chefs directly by phone
                   </p>
                 </div>
                 
@@ -175,7 +175,7 @@ function PaymentSuccessContent() {
                 Need help? Contact our support team
               </p>
               <p className="text-sm text-gray-400">
-                You&apos;ll receive a confirmation email shortly with your receipt
+                Your payment confirmation is available in your account
               </p>
             </div>
           </motion.div>

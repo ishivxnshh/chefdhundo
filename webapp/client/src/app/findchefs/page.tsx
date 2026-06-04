@@ -48,7 +48,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useSupabaseCurrentUser } from "@/store/supabase-store/user-db-store";
-import { maskEmail, maskPhone } from "@/lib/utils";
+import { maskPhone } from "@/lib/utils";
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -199,7 +199,6 @@ function FindChefPage() {
     // Prepare data for the resume template
     const resumeData = {
       name: resume.name || 'Chef Name',
-      email: resume.email || 'Email not provided',
       mobile: resume.phone || 'Phone not provided',
       location: resume.user_location || resume.city || 'Location not specified',
       age: resume.age_range || 'Age not specified',
@@ -445,7 +444,7 @@ function FindChefPage() {
               {/* Search Input */}
               <Input
                 type="text"
-                placeholder="Search by name, email, phone, experience, or profession..."
+                placeholder="Search by name, phone, experience, or profession..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full text-lg p-6 rounded-md border-gray-300"
@@ -591,7 +590,6 @@ function FindChefPage() {
                   {resumes.map((resume, index) => {
                     // Extract data directly from Supabase resume object
                     const name = resume.name || 'Name not available';
-                    const email = resume.email || '';
                     const phone = resume.phone || '';
                     const location = resume.city || resume.user_location || 'Location not specified';
                     const totalExperience = resume.experience_years || 0;
@@ -655,28 +653,7 @@ function FindChefPage() {
                           </CardHeader>
                           <CardContent className="flex-grow">
                             <div className="border-t pt-4 mt-4">
-                              {email && (
-                                <div className="flex items-center justify-between">
-                                  <p className="text-sm text-gray-600 flex items-center gap-2">
-                                    <svg
-                                      className="w-4 h-4"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      viewBox="0 0 24 24"
-                                      xmlns="http://www.w3.org/2000/svg"
-                                    >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                                      />
-                                    </svg>
-                                    <strong>Email:</strong>{" "}
-                                    {maskEmail(email, userRole)}
-                                  </p>
-                                </div>
-                              )}
+
                               {phone && (
                                 <div className="flex items-center justify-between">
                                   <p className="text-sm text-gray-600 flex items-center gap-2">
@@ -825,17 +802,7 @@ function FindChefPage() {
                     Contact Information
                   </h3>
                   <div className="space-y-3">
-                    {selectedResume.email && (
-                      <div className="flex items-center gap-3">
-                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                        </svg>
-                        <div>
-                          <p className="text-sm font-medium text-gray-700">Email</p>
-                          <p className="text-sm text-gray-600">{selectedResume.email}</p>
-                        </div>
-                      </div>
-                    )}
+
                     {selectedResume.phone && (
                       <div className="flex items-center gap-3">
                         <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">

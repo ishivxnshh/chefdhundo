@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { updateResume, deleteResume } from '@/lib/supabase/database'
+import { auth } from '@clerk/nextjs/server'
+import { updateResume, deleteResume, getUserByClerkId } from '@/lib/supabase/database'
+import { createSupabaseAdminClient } from '@/lib/supabase/supabase'
 import { ResumeUpdate } from '@/types/supabase'
 
 type ResumeRouteParams = {
@@ -8,6 +10,24 @@ type ResumeRouteParams = {
 
 type ResumeRouteContext = {
   params: Promise<ResumeRouteParams>
+}
+
+async function canMutateResume(resumeId: string) {
+  const { userId } = await auth()
+  if (!userId) return false
+
+  const user = await getUserByClerkId(userId)
+  if (!user.success || !user.data) return false
+  if (user.data.role === 'admin') return true
+
+  const supabase = createSupabaseAdminClient()
+  const { data: resume } = await supabase
+    .from('resumes')
+    .select('user_id')
+    .eq('id', resumeId)
+    .maybeSingle()
+
+  return resume?.user_id === user.data.id
 }
 
 // PUT /api/resumes/[id] - Update resume
@@ -28,12 +48,19 @@ export async function PUT(
       )
     }
 
+    if (!(await canMutateResume(resumeId))) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden' },
+        { status: 403 }
+      )
+    }
+
     // Create update object with only provided fields
     const updates: ResumeUpdate = {}
     
     // Map all possible fields that can be updated
     const updatableFields = [
-      'name', 'email', 'phone', 'user_location', 'age_range', 'gender', 
+      'name', 'phone', 'user_location', 'age_range', 'gender',
       'city', 'user_state', 'pin_code', 'experience_years', 'experiences',
       'profession', 'job_role', 'education', 'cuisines', 'languages',
       'certifications', 'current_ctc', 'expected_ctc', 'notice_period',
@@ -85,6 +112,13 @@ export async function DELETE(
       return NextResponse.json(
         { success: false, error: 'Resume ID is required' },
         { status: 400 }
+      )
+    }
+
+    if (!(await canMutateResume(resumeId))) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden' },
+        { status: 403 }
       )
     }
 

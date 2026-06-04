@@ -78,6 +78,7 @@ type ClerkUserProfile = {
   imageUrl?: string | null
   primaryEmailAddressId?: string | null
   emailAddresses?: ClerkEmailAddress[]
+  primaryPhoneNumber?: { phoneNumber: string } | null
 }
 
 interface UserSupabaseState {
@@ -255,7 +256,9 @@ export const useSupabaseUserStore = create<UserSupabaseState>((set, get) => ({
 
       const userData = {
         clerk_user_id: clerkUser.id,
-        name: `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim() || 'Unknown User',
+        name: `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim()
+          || clerkUser.primaryPhoneNumber?.phoneNumber
+          || clerkUser.id.replace('phone:', ''),
         email: primaryEmail,
         photo: clerkUser.imageUrl || undefined
       }
@@ -454,10 +457,6 @@ export const useSupabaseUserStore = create<UserSupabaseState>((set, get) => ({
         throw new Error('targetUserId and newRole are required')
       }
       
-      // Get current admin user's Clerk ID for verification
-      const currentUser = get().currentUser
-      const adminClerkId = currentUser?.clerk_user_id || null
-      
       const response = await fetch(`/api/admin/users/role`, {
         method: 'PATCH',
         headers: {
@@ -465,8 +464,7 @@ export const useSupabaseUserStore = create<UserSupabaseState>((set, get) => ({
         },
         body: JSON.stringify({
           targetUserId: userId,
-          newRole: newRole,
-          adminClerkId: adminClerkId
+          newRole: newRole
         }),
       })
       

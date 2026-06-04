@@ -4,6 +4,12 @@ import { supabaseAdmin } from '@/lib/supabase/supabase'
 import { getUserByClerkId, createUser } from '@/lib/supabase/database'
 import type { User } from '@/types/supabase'
 
+function withoutEmail<T extends Record<string, unknown>>(resume: T) {
+  const safeResume = { ...resume }
+  delete safeResume.email
+  return safeResume
+}
+
 /**
  * POST /api/resumes/claim
  *
@@ -254,7 +260,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: true,
-          data: { resumeId: updatedResume.id, resume: updatedResume, message: 'Resume claimed successfully!' },
+          data: { resumeId: updatedResume.id, resume: withoutEmail(updatedResume), message: 'Resume claimed successfully!' },
         },
         { status: 200 }
       )
@@ -264,13 +270,12 @@ export async function POST(request: NextRequest) {
       id: finalResume.id,
       user_id: finalResume.user_id,
       claimed: finalResume.claimed,
-      email: finalResume.email,
     }))
 
     return NextResponse.json(
       {
         success: true,
-        data: { resumeId: finalResume.id, resume: finalResume, message: 'Resume claimed successfully!' },
+        data: { resumeId: finalResume.id, resume: withoutEmail(finalResume), message: 'Resume claimed successfully!' },
       },
       { status: 200 }
     )

@@ -5,7 +5,7 @@ import { motion } from 'framer-motion'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Resume } from '@/types/supabase'
-import { maskEmail, maskPhone } from '@/lib/utils'
+import { maskPhone } from '@/lib/utils'
 
 interface ChefCardProps {
   resume: Resume
@@ -25,7 +25,6 @@ const ChefCard = memo(function ChefCard({
 }: ChefCardProps) {
   // Extract data directly from Supabase resume object
   const name = resume.name || 'Name not available'
-  const email = resume.email || ''
   const phone = resume.phone || ''
   const location = resume.city || resume.user_location || 'Location not specified'
   const totalExperience = resume.experience_years || 0
@@ -91,28 +90,6 @@ const ChefCard = memo(function ChefCard({
         </CardHeader>
         <CardContent className="flex-grow">
           <div className="border-t pt-4 mt-4">
-            {email && (
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-gray-600 flex items-center gap-2">
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                    />
-                  </svg>
-                  <strong>Email:</strong>{" "}
-                  {maskEmail(email, userRole)}
-                </p>
-              </div>
-            )}
             {phone && (
               <div className="flex items-center justify-between">
                 <p className="text-sm text-gray-600 flex items-center gap-2">
