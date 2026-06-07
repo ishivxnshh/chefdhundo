@@ -6,36 +6,27 @@ import {
   ResumeInsert,
   ResumeUpdate,
   UserWithResume,
-  ClerkUserData,
+  MobileUserData,
   ApiResponse
 } from '@/types/supabase'
 
 // ==================== USER OPERATIONS ====================
 
-/**
- * Create a new user from Clerk webhook data
- */
-export async function createUser(userData: ClerkUserData): Promise<ApiResponse<User>> {
+export async function createUser(userData: MobileUserData): Promise<ApiResponse<User>> {
   try {
-
     const { data, error } = await supabaseAdmin
       .from('users')
       .insert({
         clerk_user_id: userData.clerk_user_id,
         name: userData.name,
-        email: userData.email,
         photo: userData.photo,
-        role: 'basic', // Default role
-        chef: 'no' // Default chef status
+        role: 'basic',
+        chef: 'no'
       })
       .select()
       .single()
 
-    if (error) {
-
-      return { success: false, error: error.message }
-    }
-
+    if (error) return { success: false, error: error.message }
     return { success: true, data }
   } catch (error) {
     console.error('Unexpected error creating user:', error)
@@ -44,76 +35,36 @@ export async function createUser(userData: ClerkUserData): Promise<ApiResponse<U
 }
 
 /**
- * Get user by Clerk user ID
+ * Compatibility lookup for the existing users.clerk_user_id column.
+ * Mobile identities are stored as phone:+91XXXXXXXXXX.
  */
-export async function getUserByClerkId(clerkUserId: string): Promise<ApiResponse<User>> {
+export async function getUserByIdentityId(identityId: string): Promise<ApiResponse<User>> {
   try {
-
     const { data, error } = await supabaseAdmin
       .from('users')
       .select('*')
-      .eq('clerk_user_id', clerkUserId)
-      .maybeSingle() // Use maybeSingle() instead of single() to handle 0 or 1 rows
+      .eq('clerk_user_id', identityId)
+      .maybeSingle()
 
-    if (error) {
-
-      return { success: false, error: error.message }
-    }
-
-    if (!data) {
-      // User not found - this is not an error, just no user exists yet
-      return { success: false, error: 'User not found in database' }
-    }
-
+    if (error) return { success: false, error: error.message }
+    if (!data) return { success: false, error: 'User not found in database' }
     return { success: true, data }
   } catch (error) {
-    console.error('Unexpected error fetching user by Clerk ID:', error)
+    console.error('Unexpected error fetching user by identity ID:', error)
     return { success: false, error: 'Failed to fetch user' }
   }
 }
 
-/**
- * Get user by email
- */
-export async function getUserByEmail(email: string): Promise<ApiResponse<User>> {
+export async function updateUser(identityId: string, updates: UserUpdate): Promise<ApiResponse<User>> {
   try {
-
-    const { data, error } = await supabaseAdmin
-      .from('users')
-      .select('*')
-      .eq('email', email)
-      .single()
-
-    if (error) {
-
-      return { success: false, error: error.message }
-    }
-
-    return { success: true, data }
-  } catch (error) {
-    console.error('Unexpected error fetching user by email:', error)
-    return { success: false, error: 'Failed to fetch user' }
-  }
-}
-
-/**
- * Update user information
- */
-export async function updateUser(clerkUserId: string, updates: UserUpdate): Promise<ApiResponse<User>> {
-  try {
-
     const { data, error } = await supabaseAdmin
       .from('users')
       .update(updates)
-      .eq('clerk_user_id', clerkUserId)
+      .eq('clerk_user_id', identityId)
       .select()
       .single()
 
-    if (error) {
-
-      return { success: false, error: error.message }
-    }
-
+    if (error) return { success: false, error: error.message }
     return { success: true, data }
   } catch (error) {
     console.error('Unexpected error updating user:', error)
@@ -121,13 +72,8 @@ export async function updateUser(clerkUserId: string, updates: UserUpdate): Prom
   }
 }
 
-/**
- * Update user by Supabase user ID (admin function)
- */
 export async function updateUserById(userId: string, updates: UserUpdate): Promise<ApiResponse<User>> {
   try {
-    console.log('🔄 Database: Updating user with ID:', userId, 'Updates:', updates)
-
     const { data, error } = await supabaseAdmin
       .from('users')
       .update(updates)
@@ -135,73 +81,45 @@ export async function updateUserById(userId: string, updates: UserUpdate): Promi
       .select()
       .single()
 
-    if (error) {
-      console.error('❌ Database: Error updating user:', error)
-      return { success: false, error: error.message }
-    }
-
-    console.log('✅ Database: User updated successfully')
+    if (error) return { success: false, error: error.message }
     return { success: true, data }
   } catch (error) {
-    console.error('❌ Database: Unexpected error updating user:', error)
+    console.error('Unexpected error updating user:', error)
     return { success: false, error: 'Failed to update user' }
   }
 }
 
-/**
- * Delete user (admin function)
- * WARNING: This will cascade delete all related data (resumes, payments, subscriptions)
- */
 export async function deleteUser(userId: string): Promise<ApiResponse<null>> {
   try {
-    console.log('🗑️ Database: Deleting user with ID:', userId)
-
-    // Check if user exists before deleting
     const { error: userError } = await supabaseAdmin
       .from('users')
       .select('id')
       .eq('id', userId)
       .single()
 
-    if (userError) {
-      console.error('❌ Database: Error fetching user for deletion:', userError)
-      return { success: false, error: userError.message }
-    }
+    if (userError) return { success: false, error: userError.message }
 
-    // Delete the user (cascade will handle related records)
     const { error } = await supabaseAdmin
       .from('users')
       .delete()
       .eq('id', userId)
 
-    if (error) {
-      console.error('❌ Database: Error deleting user:', error)
-      return { success: false, error: error.message }
-    }
-
-    console.log('✅ Database: User deleted successfully')
+    if (error) return { success: false, error: error.message }
     return { success: true, data: null }
   } catch (error) {
-    console.error('❌ Database: Unexpected error deleting user:', error)
+    console.error('Unexpected error deleting user:', error)
     return { success: false, error: 'Failed to delete user' }
   }
 }
 
-/**
- * Get all users (admin function)
- */
 export async function getAllUsers(): Promise<ApiResponse<User[]>> {
   try {
-
     const { data, error } = await supabaseAdmin
       .from('users')
       .select('*')
       .order('created_at', { ascending: false })
 
-    if (error) {
-      return { success: false, error: error.message }
-    }
-
+    if (error) return { success: false, error: error.message }
     return { success: true, data: data || [] }
   } catch (error) {
     console.error('Unexpected error fetching users:', error)
@@ -209,22 +127,15 @@ export async function getAllUsers(): Promise<ApiResponse<User[]>> {
   }
 }
 
-/**
- * Get all chefs
- */
 export async function getAllChefs(): Promise<ApiResponse<User[]>> {
   try {
-
     const { data, error } = await supabaseAdmin
       .from('users')
       .select('*')
       .eq('chef', 'yes')
       .order('created_at', { ascending: false })
 
-    if (error) {
-      return { success: false, error: error.message }
-    }
-
+    if (error) return { success: false, error: error.message }
     return { success: true, data: data || [] }
   } catch (error) {
     console.error('Unexpected error fetching chefs:', error)
@@ -234,40 +145,22 @@ export async function getAllChefs(): Promise<ApiResponse<User[]>> {
 
 // ==================== RESUME OPERATIONS ====================
 
-/**
- * Create a new resume
- */
 export async function createResume(resumeData: ResumeInsert): Promise<ApiResponse<Resume>> {
   try {
-    // 🔥 DEBUG: Log resume details before insert
-    console.log('💾 Database: Creating resume')
-    console.log('  📝 Resume name:', resumeData.name)
-    console.log('  👤 Resume user_id:', resumeData.user_id)
-    console.log('  ✔️ Resume claimed:', resumeData.claimed)
-    console.log('  🎫 Resume claim_token:', resumeData.claim_token)
-
     const { data, error } = await supabaseAdmin
       .from('resumes')
-      .insert([resumeData])   // ✅ FIXED (NO UPSERT)
+      .insert([resumeData])
       .select()
       .single()
 
-    if (error) {
-      console.error('❌ Error creating resume:', error)
-      return { success: false, error: error.message }
-    }
-
-    console.log('✅ Database: Resume created successfully with ID:', data.id, 'user_id:', data.user_id)
+    if (error) return { success: false, error: error.message }
     return { success: true, data }
   } catch (error) {
-    console.error('❌ Unexpected error creating resume:', error)
+    console.error('Unexpected error creating resume:', error)
     return { success: false, error: 'Failed to create resume' }
   }
 }
 
-/**
- * Get resume by user ID (single resume)
- */
 export async function getResumeByUserId(userId: string): Promise<ApiResponse<Resume>> {
   try {
     const { data, error } = await supabaseAdmin
@@ -276,10 +169,7 @@ export async function getResumeByUserId(userId: string): Promise<ApiResponse<Res
       .eq('user_id', userId)
       .single()
 
-    if (error) {
-      return { success: false, error: error.message }
-    }
-
+    if (error) return { success: false, error: error.message }
     return { success: true, data }
   } catch (error) {
     console.error('Unexpected error fetching resume:', error)
@@ -287,9 +177,6 @@ export async function getResumeByUserId(userId: string): Promise<ApiResponse<Res
   }
 }
 
-/**
- * Get all resumes by user ID (multiple resumes)
- */
 export async function getResumesByUserId(userId: string): Promise<ApiResponse<Resume[]>> {
   try {
     const { data, error } = await supabaseAdmin
@@ -298,10 +185,7 @@ export async function getResumesByUserId(userId: string): Promise<ApiResponse<Re
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
 
-    if (error) {
-      return { success: false, error: error.message }
-    }
-
+    if (error) return { success: false, error: error.message }
     return { success: true, data: data || [] }
   } catch (error) {
     console.error('Unexpected error fetching resumes:', error)
@@ -309,9 +193,6 @@ export async function getResumesByUserId(userId: string): Promise<ApiResponse<Re
   }
 }
 
-/**
- * Get the latest resume by phone number (used for WhatsApp duplicate check)
- */
 export async function getResumeByPhone(phone: string): Promise<ApiResponse<Resume>> {
   try {
     const { data, error } = await supabaseAdmin
@@ -322,28 +203,17 @@ export async function getResumeByPhone(phone: string): Promise<ApiResponse<Resum
       .limit(1)
       .maybeSingle()
 
-    if (error) {
-      return { success: false, error: error.message }
-    }
-
-    if (!data) {
-      return { success: false, error: 'No resume found for this phone number' }
-    }
-
+    if (error) return { success: false, error: error.message }
+    if (!data) return { success: false, error: 'No resume found for this phone number' }
     return { success: true, data }
   } catch (error) {
-    console.error('❌ Unexpected error fetching resume by phone:', error)
+    console.error('Unexpected error fetching resume by phone:', error)
     return { success: false, error: 'Failed to fetch resume by phone' }
   }
 }
 
-/**
- * Update resume
- */
 export async function updateResume(resumeId: string, updates: ResumeUpdate): Promise<ApiResponse<Resume>> {
   try {
-    console.log('🔄 Database: Updating resume with ID:', resumeId, 'Updates:', updates)
-    
     const { data, error } = await supabaseAdmin
       .from('resumes')
       .update(updates)
@@ -351,47 +221,29 @@ export async function updateResume(resumeId: string, updates: ResumeUpdate): Pro
       .select()
       .single()
 
-    if (error) {
-      console.error('❌ Database: Error updating resume:', error)
-      return { success: false, error: error.message }
-    }
-
-    console.log('✅ Database: Resume updated successfully:', data)
+    if (error) return { success: false, error: error.message }
     return { success: true, data }
   } catch (error) {
-    console.error('❌ Database: Unexpected error updating resume:', error)
+    console.error('Unexpected error updating resume:', error)
     return { success: false, error: 'Failed to update resume' }
   }
 }
 
-/**
- * Get all resumes (admin function)
- */
 export async function getAllResumes(): Promise<ApiResponse<Resume[]>> {
   try {
-    console.log('🔍 Database: Fetching all resumes using admin client...')
-    
     const { data, error } = await supabaseAdmin
       .from('resumes')
       .select('*')
       .order('created_at', { ascending: false })
 
-    if (error) {
-      console.error('❌ Database: Error fetching resumes:', error)
-      return { success: false, error: error.message }
-    }
-
-    console.log('✅ Database: Successfully fetched resumes:', data?.length || 0)
+    if (error) return { success: false, error: error.message }
     return { success: true, data: data || [] }
   } catch (error) {
-    console.error('❌ Database: Unexpected error fetching resumes:', error)
+    console.error('Unexpected error fetching resumes:', error)
     return { success: false, error: 'Failed to fetch resumes' }
   }
 }
 
-/**
- * Pagination response type
- */
 interface PaginatedResponse<T> {
   success: boolean
   data?: T
@@ -405,10 +257,6 @@ interface PaginatedResponse<T> {
   error?: string
 }
 
-/**
- * Get all resumes with server-side pagination and filtering
- * This is optimized for large datasets - only fetches what's needed
- */
 export async function getAllResumesPaginated(options: {
   page: number
   limit: number
@@ -419,21 +267,15 @@ export async function getAllResumesPaginated(options: {
   try {
     const { page, limit, search, experience, profession } = options
 
-    console.log('🔍 Database: Fetching paginated resumes...', { page, limit, search, experience, profession })
-
-    // Build the base filtered query, then dedupe by user and paginate in memory.
-    // This guarantees one card per user even if historical duplicate resume rows exist.
     let query = supabaseAdmin
       .from('resumes')
       .select('*')
 
-    // Apply search filter (name, email, phone, profession)
     if (search && search.trim()) {
       const searchTerm = search.trim().toLowerCase()
-      query = query.or(`name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%,profession.ilike.%${searchTerm}%,work_type.ilike.%${searchTerm}%`)
+      query = query.or(`name.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%,profession.ilike.%${searchTerm}%,work_type.ilike.%${searchTerm}%`)
     }
 
-    // Apply experience filter
     if (experience && experience !== 'all') {
       switch (experience) {
         case 'fresher':
@@ -451,26 +293,17 @@ export async function getAllResumesPaginated(options: {
       }
     }
 
-    // Apply profession filter
     if (profession && profession !== 'all') {
       query = query.or(`profession.eq.${profession},work_type.eq.${profession},job_role.eq.${profession}`)
     }
 
-    // Apply ordering (latest resume first per user after dedupe)
-    const { data, error } = await query
-      .order('created_at', { ascending: false })
-
-    if (error) {
-      console.error('❌ Database: Error fetching paginated resumes:', error)
-      return { success: false, error: error.message }
-    }
+    const { data, error } = await query.order('created_at', { ascending: false })
+    if (error) return { success: false, error: error.message }
 
     const latestByUser = new Map<string, Resume>()
     for (const resume of data || []) {
       const key = resume.user_id || resume.id
-      if (!latestByUser.has(key)) {
-        latestByUser.set(key, resume)
-      }
+      if (!latestByUser.has(key)) latestByUser.set(key, resume)
     }
 
     const dedupedResumes = Array.from(latestByUser.values())
@@ -479,14 +312,6 @@ export async function getAllResumesPaginated(options: {
     const safePage = Math.min(Math.max(page, 1), Math.max(totalPages, 1))
     const offset = (safePage - 1) * limit
     const paginatedResumes = dedupedResumes.slice(offset, offset + limit)
-
-    console.log('✅ Database: Successfully fetched paginated resumes:', {
-      fetched: paginatedResumes.length,
-      dedupedTotal: total,
-      total,
-      page: safePage,
-      totalPages
-    })
 
     return {
       success: true,
@@ -500,14 +325,11 @@ export async function getAllResumesPaginated(options: {
       }
     }
   } catch (error) {
-    console.error('❌ Database: Unexpected error fetching paginated resumes:', error)
+    console.error('Unexpected error fetching paginated resumes:', error)
     return { success: false, error: 'Failed to fetch resumes' }
   }
 }
 
-/**
- * Search resumes by criteria
- */
 export async function searchResumes(criteria: {
   location?: string
   profession?: string
@@ -515,9 +337,7 @@ export async function searchResumes(criteria: {
   cuisines?: string[]
 }): Promise<ApiResponse<Resume[]>> {
   try {
-    let query = supabaseAdmin
-      .from('resumes')
-      .select('*')
+    let query = supabaseAdmin.from('resumes').select('*')
 
     if (criteria.location) {
       query = query.or(`city.ilike.%${criteria.location}%,user_location.ilike.%${criteria.location}%,preferred_location.ilike.%${criteria.location}%`)
@@ -532,18 +352,12 @@ export async function searchResumes(criteria: {
     }
 
     if (criteria.cuisines && criteria.cuisines.length > 0) {
-      // Search in cuisines field using OR conditions for multiple cuisines
       const cuisineConditions = criteria.cuisines.map(cuisine => `cuisines.ilike.%${cuisine}%`).join(',')
       query = query.or(cuisineConditions)
     }
 
     const { data, error } = await query.order('created_at', { ascending: false })
-
-    if (error) {
-      console.error('Error searching resumes:', error)
-      return { success: false, error: error.message }
-    }
-
+    if (error) return { success: false, error: error.message }
     return { success: true, data: data || [] }
   } catch (error) {
     console.error('Unexpected error searching resumes:', error)
@@ -551,63 +365,43 @@ export async function searchResumes(criteria: {
   }
 }
 
-/**
- * Delete resume
- */
 export async function deleteResume(resumeId: string): Promise<ApiResponse<null>> {
   try {
-    console.log('🗑️ Database: Deleting resume with ID:', resumeId)
-    
-    const { error } = await supabaseAdmin  // ✅ Changed from supabase to supabaseAdmin
+    const { error } = await supabaseAdmin
       .from('resumes')
       .delete()
       .eq('id', resumeId)
 
-    if (error) {
-      console.error('❌ Database: Error deleting resume:', error)
-      return { success: false, error: error.message }
-    }
-
-    console.log('✅ Database: Resume deleted successfully')
+    if (error) return { success: false, error: error.message }
     return { success: true, data: null }
   } catch (error) {
-    console.error('❌ Database: Unexpected error deleting resume:', error)
+    console.error('Unexpected error deleting resume:', error)
     return { success: false, error: 'Failed to delete resume' }
   }
 }
 
 // ==================== UTILITY FUNCTIONS ====================
 
-/**
- * Upsert user (create if not exists, update if exists)
- */
-export async function upsertUser(userData: ClerkUserData): Promise<ApiResponse<User>> {
+export async function upsertUser(userData: MobileUserData): Promise<ApiResponse<User>> {
   try {
-    // Try to get existing user first
-    const existingUser = await getUserByClerkId(userData.clerk_user_id)
-    
+    const existingUser = await getUserByIdentityId(userData.clerk_user_id)
+
     if (existingUser.success && existingUser.data) {
-      // Update existing user
       const updateData: UserUpdate = {
         name: userData.name,
-        email: userData.email,
         photo: userData.photo
       }
       return await updateUser(userData.clerk_user_id, updateData)
-    } else {
-      // Create new user
-      return await createUser(userData)
     }
+
+    return await createUser(userData)
   } catch (error) {
     console.error('Unexpected error upserting user:', error)
     return { success: false, error: 'Failed to upsert user' }
   }
 }
 
-/**
- * Get user with their resume data
- */
-export async function getUserWithResume(clerkUserId: string): Promise<ApiResponse<UserWithResume>> {
+export async function getUserWithResume(identityId: string): Promise<ApiResponse<UserWithResume>> {
   try {
     const { data, error } = await supabaseAdmin
       .from('users')
@@ -615,48 +409,13 @@ export async function getUserWithResume(clerkUserId: string): Promise<ApiRespons
         *,
         resumes (*)
       `)
-      .eq('clerk_user_id', clerkUserId)
+      .eq('clerk_user_id', identityId)
       .single()
 
-    if (error) {
-      return { success: false, error: error.message }
-    }
-
+    if (error) return { success: false, error: error.message }
     return { success: true, data }
   } catch (error) {
     console.error('Unexpected error fetching user with resume:', error)
     return { success: false, error: 'Failed to fetch user with resume' }
-  }
-}
-
-/**
- * Update a user record identified by email
- */
-export async function updateUserByEmail(email: string, updates: Partial<UserUpdate>): Promise<ApiResponse<User>> {
-  try {
-    const payload = Object.fromEntries(
-      Object.entries({ ...updates }).filter(([, value]) => value !== undefined)
-    ) as UserUpdate
-
-    if (Object.keys(payload).length === 0) {
-      const existing = await getUserByEmail(email)
-      return existing
-    }
-
-    const { data, error } = await supabaseAdmin
-      .from('users')
-      .update(payload)
-      .eq('email', email)
-      .select()
-      .single()
-
-    if (error) {
-      return { success: false, error: error.message }
-    }
-
-    return { success: true, data }
-  } catch (error) {
-    console.error('Unexpected error updating user by email:', error)
-    return { success: false, error: 'Failed to update user' }
   }
 }

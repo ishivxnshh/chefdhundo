@@ -46,7 +46,7 @@ function getCachedResumes(filters?: FilterState, requireFullList: boolean = fals
     const cached = localStorage.getItem(RESUMES_CACHE_KEY)
     if (!cached) return null
     const parsed: CachedResumes = JSON.parse(cached)
-    
+
     // Check if cache is expired
     if (Date.now() - parsed.timestamp > CACHE_DURATION) {
       localStorage.removeItem(RESUMES_CACHE_KEY)
@@ -57,19 +57,19 @@ function getCachedResumes(filters?: FilterState, requireFullList: boolean = fals
     if (requireFullList && !parsed.isFullList) {
       return null
     }
-    
+
     // If filters are provided, they MUST match exactly
     if (filters) {
       // If there's an active search, don't use cache (always fetch fresh)
       if (filters.search && filters.search.trim() !== '') {
         return null
       }
-      
+
       // If cached filters don't exist or don't match, invalidate
       if (!parsed.filters) {
         return null
       }
-      
+
       if (
         filters.search !== parsed.filters.search ||
         filters.experience !== parsed.filters.experience ||
@@ -78,7 +78,7 @@ function getCachedResumes(filters?: FilterState, requireFullList: boolean = fals
         return null // Filters don't match, cache invalid
       }
     }
-    
+
     return { data: parsed.data, pagination: parsed.pagination }
   } catch {
     return null
@@ -88,8 +88,8 @@ function getCachedResumes(filters?: FilterState, requireFullList: boolean = fals
 function setCachedResumes(resumes: Resume[], pagination?: PaginationInfo, filters?: FilterState, isFullList: boolean = false) {
   if (typeof window === 'undefined') return
   try {
-    const cache: CachedResumes = { 
-      data: resumes, 
+    const cache: CachedResumes = {
+      data: resumes,
       timestamp: Date.now(),
       pagination,
       filters,
@@ -117,12 +117,12 @@ interface ResumeSupabaseState {
   isLoading: boolean
   error: string | null
   isResumeLoaded: boolean
-  
+
   // Pagination state
   pagination: PaginationInfo | null
   currentFilters: FilterState
   uniqueProfessions: string[]
-  
+
   // Actions
   fetchAllResumes: () => Promise<void>
   fetchResumesPaginated: (options: {
@@ -133,7 +133,9 @@ interface ResumeSupabaseState {
     profession?: string
   }) => Promise<void>
   fetchResumesByUserId: (userId: string) => Promise<void>
-  createResume: (resumeData: Omit<Resume, 'id' | 'created_at' | 'updated_at'>) => Promise<void>
+  createResume: (
+    resumeData: Partial<Omit<Resume, 'id' | 'created_at' | 'updated_at'>> & Pick<Resume, 'user_id' | 'name'>
+  ) => Promise<void>
   updateResume: (resumeId: string, updates: Partial<Resume>) => Promise<void>
   deleteResume: (resumeId: string) => Promise<void>
   searchResumes: (criteria: {
@@ -158,7 +160,7 @@ export const useSupabaseResumeStore = create<ResumeSupabaseState>((set, get) => 
   isLoading: false,
   error: null,
   isResumeLoaded: false,
-  
+
   // Pagination state
   pagination: null,
   currentFilters: { search: '', experience: 'all', profession: 'all' },
@@ -170,34 +172,31 @@ export const useSupabaseResumeStore = create<ResumeSupabaseState>((set, get) => 
     const cached = getCachedResumes(undefined, true)
     if (cached && cached.data.length > 0) {
       const dedupedCached = dedupeResumesByUser(cached.data)
-      set({ 
-        resumes: dedupedCached, 
-        isLoading: false, 
-        isResumeLoaded: true, 
+      set({
+        resumes: dedupedCached,
+        isLoading: false,
+        isResumeLoaded: true,
         error: null,
-        pagination: cached.pagination || null 
+        pagination: cached.pagination || null
       })
       return
     }
-    
+
     try {
       set({ isLoading: true, error: null })
-      console.log('🔍 Supabase Resume Store: Fetching all resumes...')
-      
       const response = await fetch('/api/resumes')
       if (!response.ok && response.status === 401) {
         set({ resumes: [], isLoading: false, isResumeLoaded: true, error: 'Unauthorized' })
         return
       }
       const result = await response.json()
-      
+
       if (result.success && result.data) {
-        console.log('✅ Supabase Resume Store: Resumes fetched successfully:', result.data.length)
         const dedupedResumes = dedupeResumesByUser(result.data)
         const backendWarning = result.schemaReady === false
           ? (result.message || 'Database schema is not ready. Please verify Supabase tables and permissions.')
           : null
-        
+
         // Extract unique professions for filter dropdown
         const professions = new Set<string>()
         result.data.forEach((resume: Resume) => {
@@ -205,21 +204,21 @@ export const useSupabaseResumeStore = create<ResumeSupabaseState>((set, get) => 
           if (resume.work_type) professions.add(resume.work_type)
           if (resume.job_role) professions.add(resume.job_role)
         })
-        
+
         // Cache as FULL list
         setCachedResumes(dedupedResumes, undefined, undefined, true)
-        set({ 
-          resumes: dedupedResumes, 
-          isLoading: false, 
+        set({
+          resumes: dedupedResumes,
+          isLoading: false,
           isResumeLoaded: true,
           error: backendWarning,
           uniqueProfessions: Array.from(professions).sort()
         })
       } else {
         console.error('❌ Supabase Resume Store: API returned error:', result.error)
-        set({ 
-          resumes: [], 
-          isLoading: false, 
+        set({
+          resumes: [],
+          isLoading: false,
           isResumeLoaded: true,
           error: result.error || 'Failed to fetch resumes'
         })
@@ -227,11 +226,11 @@ export const useSupabaseResumeStore = create<ResumeSupabaseState>((set, get) => 
     } catch (error) {
       console.error('❌ Supabase Resume Store: Network error:', error)
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      set({ 
+      set({
         resumes: [],
-        isLoading: false, 
+        isLoading: false,
         isResumeLoaded: true,
-        error: errorMessage 
+        error: errorMessage
       })
     }
   },
@@ -240,16 +239,16 @@ export const useSupabaseResumeStore = create<ResumeSupabaseState>((set, get) => 
   fetchResumesPaginated: async (options) => {
     const { page, limit = 12, search = '', experience = 'all', profession = 'all' } = options
     const filters: FilterState = { search, experience, profession }
-    
+
     // Check cache for same filters and page 1
     if (page === 1) {
       const cached = getCachedResumes(filters)
       if (cached && cached.data.length > 0) {
         const dedupedCached = dedupeResumesByUser(cached.data)
-        set({ 
-          resumes: dedupedCached, 
-          isLoading: false, 
-          isResumeLoaded: true, 
+        set({
+          resumes: dedupedCached,
+          isLoading: false,
+          isResumeLoaded: true,
           error: null,
           pagination: cached.pagination || null,
           currentFilters: filters
@@ -257,11 +256,9 @@ export const useSupabaseResumeStore = create<ResumeSupabaseState>((set, get) => 
         return
       }
     }
-    
+
     try {
       set({ isLoading: true, error: null, currentFilters: filters })
-      console.log('🔍 Supabase Resume Store: Fetching paginated resumes...', { page, limit, search, experience, profession })
-      
       const params = new URLSearchParams({
         page: page.toString(),
         limit: limit.toString(),
@@ -269,41 +266,36 @@ export const useSupabaseResumeStore = create<ResumeSupabaseState>((set, get) => 
         experience,
         profession
       })
-      
+
       const response = await fetch(`/api/resumes?${params.toString()}`)
       if (!response.ok && response.status === 401) {
         set({ resumes: [], isLoading: false, isResumeLoaded: true, error: 'Unauthorized' })
         return
       }
       const result = await response.json()
-      
+
       if (result.success && result.data) {
         const dedupedResumes = dedupeResumesByUser(result.data)
         const backendWarning = result.schemaReady === false
           ? (result.message || 'Database schema is not ready. Please verify Supabase tables and permissions.')
           : null
-        console.log('✅ Supabase Resume Store: Paginated resumes fetched:', {
-          count: dedupedResumes.length,
-          pagination: result.pagination
-        })
-        
         // Cache page 1 results with filters - NOT a full list
         if (page === 1) {
           setCachedResumes(dedupedResumes, result.pagination, filters, false)
         }
-        
-        set({ 
-          resumes: dedupedResumes, 
-          isLoading: false, 
+
+        set({
+          resumes: dedupedResumes,
+          isLoading: false,
           isResumeLoaded: true,
           error: backendWarning,
           pagination: result.pagination || null
         })
       } else {
         console.error('❌ Supabase Resume Store: API returned error:', result.error)
-        set({ 
-          resumes: [], 
-          isLoading: false, 
+        set({
+          resumes: [],
+          isLoading: false,
           isResumeLoaded: true,
           error: result.error || 'Failed to fetch resumes'
         })
@@ -311,11 +303,11 @@ export const useSupabaseResumeStore = create<ResumeSupabaseState>((set, get) => 
     } catch (error) {
       console.error('❌ Supabase Resume Store: Network error:', error)
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      set({ 
+      set({
         resumes: [],
-        isLoading: false, 
+        isLoading: false,
         isResumeLoaded: true,
-        error: errorMessage 
+        error: errorMessage
       })
     }
   },
@@ -332,46 +324,43 @@ export const useSupabaseResumeStore = create<ResumeSupabaseState>((set, get) => 
     // Prevent duplicate calls if already loading
     const state = get()
     if (state.isLoading) {
-      console.log('🚫 Resume Store: Already loading, skipping duplicate call')
       return
     }
-    
+
     try {
       set({ isLoading: true, error: null })
-      console.log('🔍 Resume Store: Fetching resumes for user:', userId)
-      
       const response = await fetch(`/api/resumes?user_id=${userId}`)
       if (!response.ok && response.status === 401) {
         set({ resumes: [], isLoading: false, isResumeLoaded: true, error: 'Unauthorized' })
         return
       }
       const result = await response.json()
-      
+
       if (result.success && result.data) {
         const backendWarning = result.schemaReady === false
           ? (result.message || 'Database schema is not ready. Please verify Supabase tables and permissions.')
           : null
-        set({ 
-          resumes: result.data, 
-          isLoading: false, 
+        set({
+          resumes: result.data,
+          isLoading: false,
           isResumeLoaded: true,
           error: backendWarning
         })
       } else {
-        set({ 
-          resumes: [], 
-          isLoading: false, 
+        set({
+          resumes: [],
+          isLoading: false,
           isResumeLoaded: true,
-          error: result.error || 'Failed to fetch user resumes' 
+          error: result.error || 'Failed to fetch user resumes'
         })
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      set({ 
+      set({
         resumes: [],
-        isLoading: false, 
+        isLoading: false,
         isResumeLoaded: true,
-        error: errorMessage 
+        error: errorMessage
       })
     }
   },
@@ -380,7 +369,7 @@ export const useSupabaseResumeStore = create<ResumeSupabaseState>((set, get) => 
   createResume: async (resumeData) => {
     try {
       set({ isLoading: true, error: null })
-      
+
       const response = await fetch('/api/resumes', {
         method: 'POST',
         headers: {
@@ -388,35 +377,35 @@ export const useSupabaseResumeStore = create<ResumeSupabaseState>((set, get) => 
         },
         body: JSON.stringify(resumeData),
       })
-      
+
       if (!response.ok && response.status === 401) {
         set({ isLoading: false, error: 'Unauthorized' })
         return
       }
       const result = await response.json()
-      
+
       if (result.success) {
-        set({ 
-          currentResume: result.data, 
-          isLoading: false, 
-          error: null 
+        set({
+          currentResume: result.data,
+          isLoading: false,
+          error: null
         })
-        
+
         // Add to resumes array and clear cache
         const currentResumes = get().resumes
         set({ resumes: [result.data, ...currentResumes] })
         clearCachedResumes()
       } else {
-        set({ 
-          isLoading: false, 
-          error: result.error || 'Failed to create resume' 
+        set({
+          isLoading: false,
+          error: result.error || 'Failed to create resume'
         })
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      set({ 
-        isLoading: false, 
-        error: errorMessage 
+      set({
+        isLoading: false,
+        error: errorMessage
       })
     }
   },
@@ -425,9 +414,7 @@ export const useSupabaseResumeStore = create<ResumeSupabaseState>((set, get) => 
   updateResume: async (resumeId: string, updates: Partial<Resume>) => {
     try {
       set({ isLoading: true, error: null })
-      
-      console.log('🔄 Store: Sending update request for resume:', resumeId, 'with updates:', updates)
-      
+
       const response = await fetch(`/api/resumes/${resumeId}`, {
         method: 'PUT',
         headers: {
@@ -435,8 +422,7 @@ export const useSupabaseResumeStore = create<ResumeSupabaseState>((set, get) => 
         },
         body: JSON.stringify(updates),
       })
-      
-      console.log('🔄 Store: API response status:', response.status)
+
       if (!response.ok && response.status === 401) {
         set({ isLoading: false, error: 'Unauthorized' })
         return
@@ -448,37 +434,34 @@ export const useSupabaseResumeStore = create<ResumeSupabaseState>((set, get) => 
       }
 
       const result = await response.json()
-      console.log('🔄 Store: API response result:', result)
-      
       if (result.success) {
-        console.log('✅ Store: Resume update successful, updating local state')
-        set({ 
-          currentResume: result.data, 
-          isLoading: false, 
-          error: null 
+        set({
+          currentResume: result.data,
+          isLoading: false,
+          error: null
         })
-        
+
         // Update in resumes array and clear cache
         const currentResumes = get().resumes
-        const updatedResumes = currentResumes.map(resume => 
+        const updatedResumes = currentResumes.map(resume =>
           resume.id === resumeId ? result.data : resume
         )
         set({ resumes: updatedResumes })
         clearCachedResumes()
       } else {
         console.error('❌ Store: API returned error:', result.error)
-        set({ 
-          isLoading: false, 
-          error: result.error || 'Failed to update resume' 
+        set({
+          isLoading: false,
+          error: result.error || 'Failed to update resume'
         })
         throw new Error(result.error || 'Failed to update resume')
       }
     } catch (error) {
       console.error('❌ Store: Error in updateResume:', error)
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      set({ 
-        isLoading: false, 
-        error: errorMessage 
+      set({
+        isLoading: false,
+        error: errorMessage
       })
       throw error // Re-throw so the component can handle it
     }
@@ -488,45 +471,45 @@ export const useSupabaseResumeStore = create<ResumeSupabaseState>((set, get) => 
   deleteResume: async (resumeId: string) => {
     try {
       set({ isLoading: true, error: null })
-      
+
       const response = await fetch(`/api/resumes/${resumeId}`, {
         method: 'DELETE',
       })
-      
+
       if (!response.ok && response.status === 401) {
         set({ isLoading: false, error: 'Unauthorized' })
         return
       }
       const result = await response.json()
-      
+
       if (result.success) {
-        set({ 
-          isLoading: false, 
-          error: null 
+        set({
+          isLoading: false,
+          error: null
         })
-        
+
         // Remove from resumes array and clear cache
         const currentResumes = get().resumes
         const filteredResumes = currentResumes.filter(resume => resume.id !== resumeId)
         set({ resumes: filteredResumes })
         clearCachedResumes()
-        
+
         // Clear current resume if it was deleted
         const currentResume = get().currentResume
         if (currentResume && currentResume.id === resumeId) {
           set({ currentResume: null })
         }
       } else {
-        set({ 
-          isLoading: false, 
-          error: result.error || 'Failed to delete resume' 
+        set({
+          isLoading: false,
+          error: result.error || 'Failed to delete resume'
         })
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      set({ 
-        isLoading: false, 
-        error: errorMessage 
+      set({
+        isLoading: false,
+        error: errorMessage
       })
     }
   },
@@ -535,7 +518,7 @@ export const useSupabaseResumeStore = create<ResumeSupabaseState>((set, get) => 
   searchResumes: async (criteria) => {
     try {
       set({ isLoading: true, error: null })
-      
+
       const queryParams = new URLSearchParams()
       if (criteria.location) queryParams.append('location', criteria.location)
       if (criteria.profession) queryParams.append('profession', criteria.profession)
@@ -543,36 +526,36 @@ export const useSupabaseResumeStore = create<ResumeSupabaseState>((set, get) => 
       if (criteria.cuisines && criteria.cuisines.length > 0) {
         queryParams.append('cuisines', criteria.cuisines.join(','))
       }
-      
+
       const response = await fetch(`/api/resumes/search?${queryParams.toString()}`)
       if (!response.ok && response.status === 401) {
         set({ resumes: [], isLoading: false, isResumeLoaded: true, error: 'Unauthorized' })
         return
       }
       const result = await response.json()
-      
+
       if (result.success && result.data) {
-        set({ 
-          resumes: result.data, 
-          isLoading: false, 
+        set({
+          resumes: result.data,
+          isLoading: false,
           isResumeLoaded: true,
-          error: null 
+          error: null
         })
       } else {
-        set({ 
-          resumes: [], 
-          isLoading: false, 
+        set({
+          resumes: [],
+          isLoading: false,
           isResumeLoaded: true,
-          error: result.error || 'Failed to search resumes' 
+          error: result.error || 'Failed to search resumes'
         })
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      set({ 
+      set({
         resumes: [],
-        isLoading: false, 
+        isLoading: false,
         isResumeLoaded: true,
-        error: errorMessage 
+        error: errorMessage
       })
     }
   },
@@ -584,8 +567,8 @@ export const useSupabaseResumeStore = create<ResumeSupabaseState>((set, get) => 
 
   // Clear current resume
   clearCurrentResume: () => {
-    set({ 
-      currentResume: null, 
+    set({
+      currentResume: null,
       error: null
     })
   },
@@ -608,10 +591,10 @@ export const useSupabaseResumeStore = create<ResumeSupabaseState>((set, get) => 
   // Clear resumes
   clearResumes: () => {
     clearCachedResumes()
-    set({ 
+    set({
       resumes: [],
-      currentResume: null, 
-      isResumeLoaded: false, 
+      currentResume: null,
+      isResumeLoaded: false,
       error: null
     })
   },

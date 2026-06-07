@@ -2,22 +2,22 @@
 
 import React, {
   cloneElement,
+  createContext,
   isValidElement,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
+  useReducer,
   useState,
 } from "react";
 
-type CompatUser = {
+export type MobileAuthUser = {
   id: string;
   fullName: string | null;
   firstName: string | null;
   lastName: string | null;
   imageUrl: string | null;
-  primaryEmailAddressId: string;
-  primaryEmailAddress: { id: string; emailAddress: string };
-  emailAddresses: { id: string; emailAddress: string }[];
   primaryPhoneNumber: { id: string; phoneNumber: string } | null;
   primaryPhoneNumberId: string | null;
   publicMetadata: { role: "basic" | "pro" | "admin" };
@@ -25,10 +25,71 @@ type CompatUser = {
   reload: () => Promise<void>;
 };
 
+export type CompatUser = MobileAuthUser;
+
 type MeResponse = {
   isSignedIn: boolean;
-  user: Omit<CompatUser, "reload"> | null;
+  user: Omit<MobileAuthUser, "reload"> | null;
 };
+
+export type MobileAuthStatus =
+  | "loading"
+  | "authenticated"
+  | "unauthenticated"
+  | "error";
+
+export type MobileAuthState = {
+  status: MobileAuthStatus;
+  user: MobileAuthUser | null;
+  error: Error | null;
+};
+
+type MobileAuthAction =
+  | { type: "authenticated"; user: MobileAuthUser }
+  | { type: "unauthenticated" }
+  | { type: "error"; error: Error };
+
+type MobileAuthContextValue = MobileAuthState & {
+  reload: () => Promise<void>;
+};
+
+const MobileAuthContext = createContext<MobileAuthContextValue | null>(null);
+
+export function createInitialAuthState(
+  user: MobileAuthUser | null,
+): MobileAuthState {
+  return {
+    status: user ? "authenticated" : "loading",
+    user,
+    error: null,
+  };
+}
+
+export function authStateReducer(
+  state: MobileAuthState,
+  action: MobileAuthAction,
+): MobileAuthState {
+  switch (action.type) {
+    case "authenticated":
+      return {
+        status: "authenticated",
+        user: action.user,
+        error: null,
+      };
+    case "unauthenticated":
+      return {
+        status: "unauthenticated",
+        user: null,
+        error: null,
+      };
+    case "error":
+      return {
+        status: "error",
+        user: state.user,
+        error: action.error,
+      };
+  }
+}
 
 function goToSignIn() {
   window.location.href = "/sign-in";
@@ -40,36 +101,58 @@ function initials(name?: string | null) {
   return `${parts[0]?.[0] ?? ""}${parts[1]?.[0] ?? ""}`.toUpperCase() || "U";
 }
 
-export function ClerkProvider({
-  children,
-}: {
-  children: React.ReactNode;
-  publishableKey?: string;
-}) {
-  return <>{children}</>;
+function toCompatUser(
+  user: Omit<MobileAuthUser, "reload">,
+  reload: () => Promise<void>,
+): MobileAuthUser {
+  return {
+    ...user,
+    reload,
+  };
 }
 
-function useMe() {
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [user, setUser] = useState<CompatUser | null>(null);
+function toError(error: unknown) {
+  return error instanceof Error ? error : new Error("Unable to load session");
+}
+
+export function MobileAuthProvider({
+  children,
+  initialUser = null,
+}: {
+  children: React.ReactNode;
+  initialUser?: Omit<MobileAuthUser, "reload"> | null;
+}) {
+  const [state, dispatch] = useReducer(
+    authStateReducer,
+    initialUser
+      ? createInitialAuthState(
+          toCompatUser(initialUser, async () => undefined),
+        )
+      : createInitialAuthState(null),
+  );
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch("/api/auth/me", { cache: "no-store" });
+      const res = await fetch("/api/auth/me", {
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+      if (!res.ok) {
+        throw new Error(`Unable to load session (${res.status})`);
+      }
+
       const data: MeResponse = await res.json();
       if (!data?.isSignedIn || !data.user) {
-        setUser(null);
+        dispatch({ type: "unauthenticated" });
         return;
       }
 
-      setUser({
-        ...data.user,
-        reload: load,
+      dispatch({
+        type: "authenticated",
+        user: toCompatUser(data.user, load),
       });
-    } catch {
-      setUser(null);
-    } finally {
-      setIsLoaded(true);
+    } catch (error) {
+      dispatch({ type: "error", error: toError(error) });
     }
   }, []);
 
@@ -77,33 +160,62 @@ function useMe() {
     void load();
   }, [load]);
 
-  return { isLoaded, user, reload: load };
+  const value = useMemo<MobileAuthContextValue>(
+    () => ({
+      ...state,
+      user: state.user ? { ...state.user, reload: load } : null,
+      reload: load,
+    }),
+    [load, state],
+  );
+
+  return (
+    <MobileAuthContext.Provider value={value}>
+      {children}
+    </MobileAuthContext.Provider>
+  );
+}
+
+export function useMobileAuth() {
+  const context = useContext(MobileAuthContext);
+  if (!context) {
+    throw new Error("useMobileAuth must be used within MobileAuthProvider");
+  }
+  return context;
 }
 
 export function useUser() {
-  const { isLoaded, user } = useMe();
+  const { status, user, error } = useMobileAuth();
   return {
-    isLoaded,
+    isLoaded: status !== "loading",
     isSignedIn: !!user,
     user,
+    error,
+    status,
   };
 }
 
 export function useAuth() {
-  const { isLoaded, user, reload } = useMe();
+  const { status, user, error, reload } = useMobileAuth();
 
   const signOut = useCallback(async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
+    await fetch("/api/auth/logout", {
+      method: "POST",
+      credentials: "same-origin",
+    });
     await reload();
     window.location.href = "/";
   }, [reload]);
 
   return {
-    isLoaded,
+    isLoaded: status !== "loading",
     isSignedIn: !!user,
     userId: user?.id ?? null,
     getToken: async () => null,
     signOut,
+    reload,
+    error,
+    status,
   };
 }
 
@@ -148,8 +260,8 @@ export function SignedIn({ children }: { children: React.ReactNode }) {
 }
 
 export function SignedOut({ children }: { children: React.ReactNode }) {
-  const { isSignedIn } = useAuth();
-  return isSignedIn ? null : <>{children}</>;
+  const { status } = useMobileAuth();
+  return status === "unauthenticated" ? <>{children}</> : null;
 }
 
 export function UserButton({
@@ -160,25 +272,52 @@ export function UserButton({
 }) {
   const { user, isLoaded } = useUser();
   const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
 
   const label = useMemo(() => initials(user?.fullName), [user?.fullName]);
 
   if (!isLoaded || !user) return null;
 
   return (
-    <button
-      type="button"
-      title="Logout"
-      disabled={loading}
-      onClick={async () => {
-        setLoading(true);
-        await fetch("/api/auth/logout", { method: "POST" });
-        window.location.href = afterSignOutUrl;
-      }}
-      className="w-8 h-8 rounded-full bg-gray-900 text-white text-xs font-semibold"
-    >
-      {loading ? "..." : label}
-    </button>
+    <div className="relative">
+      <button
+        type="button"
+        title="Account menu"
+        aria-label="Open account menu"
+        aria-expanded={open}
+        disabled={loading}
+        onClick={() => setOpen((value) => !value)}
+        className="w-8 h-8 rounded-full bg-gray-900 text-white text-xs font-semibold"
+      >
+        {loading ? "..." : label}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 mt-2 w-56 rounded-xl border border-gray-200 bg-white p-2 text-sm shadow-xl">
+          <div className="px-3 py-2 border-b border-gray-100">
+            <p className="font-medium text-gray-900">{user.fullName || "Mobile account"}</p>
+            <p className="text-xs text-gray-500">{user.primaryPhoneNumber?.phoneNumber || user.id}</p>
+          </div>
+          <a
+            href="/dashboard"
+            className="block rounded-lg px-3 py-2 text-gray-700 hover:bg-gray-50"
+          >
+            Dashboard
+          </a>
+          <button
+            type="button"
+            className="w-full rounded-lg px-3 py-2 text-left text-red-600 hover:bg-red-50"
+            onClick={async () => {
+              setLoading(true);
+              await fetch("/api/auth/logout", { method: "POST" });
+              window.location.href = afterSignOutUrl;
+            }}
+          >
+            Logout
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

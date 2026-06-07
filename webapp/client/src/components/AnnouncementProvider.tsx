@@ -9,11 +9,8 @@ export default function AnnouncementProvider() {
   const { fetchActiveAnnouncements } = useAnnouncementStore();
 
   useEffect(() => {
-    console.log('AnnouncementProvider mounted, fetching announcements...');
     fetchActiveAnnouncements();
   }, [fetchActiveAnnouncements]);
-
-  console.log('Active announcements in provider:', activeAnnouncements);
 
   return <AnnouncementContainer announcements={activeAnnouncements} />;
 }

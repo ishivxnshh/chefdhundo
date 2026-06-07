@@ -51,7 +51,6 @@ export default function RefundsPage() {
             <section className="space-y-3">
               <h2 className="text-2xl font-semibold text-orange-600">4. Contact for Refund Queries</h2>
               <ul className="space-y-2">
-                <li><strong>Email:</strong> contact@ihmgurukul.com</li>
                 <li><strong>Phone:</strong> +91 8826147981</li>
                 <li><strong>Address:</strong> New Delhi, India</li>
               </ul>

@@ -19,21 +19,19 @@ interface UserDetailsModalProps {
 }
 
 export default function UserDetailsModal({ user, open, onClose, onUserDeleted }: UserDetailsModalProps) {
-  const { updateUserById, deleteUser, updateChefStatus } = useSupabaseUserStore()
-  
+  const { updateUser, updateUserById, deleteUser, updateChefStatus } = useSupabaseUserStore()
+
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
-  
+
   const [editedName, setEditedName] = useState('')
-  const [editedEmail, setEditedEmail] = useState('')
   const [editedPhoto, setEditedPhoto] = useState('')
 
   useEffect(() => {
     if (user) {
       setEditedName(user.name || '')
-      setEditedEmail(user.email || '')
       setEditedPhoto(user.photo || '')
       setIsEditing(false)
       setShowDeleteConfirm(false)
@@ -45,9 +43,8 @@ export default function UserDetailsModal({ user, open, onClose, onUserDeleted }:
   const handleSave = async () => {
     try {
       setIsSaving(true)
-      await updateUserById(user.id, {
+      await updateUser(user.clerk_user_id, {
         name: editedName,
-        email: editedEmail,
         photo: editedPhoto || null
       })
       toast.success('User updated successfully')
@@ -97,12 +94,6 @@ export default function UserDetailsModal({ user, open, onClose, onUserDeleted }:
     }
   }
 
-  const handlePasswordChange = () => {
-    // Redirect to Clerk user management
-    window.open('https://accounts.clerk.dev/user', '_blank')
-    toast.info('Redirected to Clerk for password management')
-  }
-
   return (
     <>
       <Dialog open={open && !showDeleteConfirm} onOpenChange={(open) => !open && onClose()}>
@@ -113,8 +104,8 @@ export default function UserDetailsModal({ user, open, onClose, onUserDeleted }:
                 <Image src={user.photo} alt={user.name} width={48} height={48} className="w-12 h-12 rounded-full object-cover" />
               )}
               <div>
-                <div>{user.name || 'Unnamed User'}</div>
-                <div className="text-sm font-normal text-gray-500">{user.email}</div>
+                <div>{user.name || user.clerk_user_id.replace('phone:', '')}</div>
+                <div className="text-sm font-normal text-gray-500">{user.clerk_user_id.replace('phone:', '')}</div>
               </div>
             </DialogTitle>
             <DialogDescription>
@@ -136,7 +127,6 @@ export default function UserDetailsModal({ user, open, onClose, onUserDeleted }:
                     <Button variant="outline" size="sm" onClick={() => {
                       setIsEditing(false)
                       setEditedName(user.name || '')
-                      setEditedEmail(user.email || '')
                       setEditedPhoto(user.photo || '')
                     }}>
                       Cancel
@@ -159,16 +149,7 @@ export default function UserDetailsModal({ user, open, onClose, onUserDeleted }:
                       placeholder="Enter name"
                     />
                   </div>
-                  <div>
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={editedEmail}
-                      onChange={(e) => setEditedEmail(e.target.value)}
-                      placeholder="Enter email"
-                    />
-                  </div>
+
                   <div>
                     <Label htmlFor="photo">Photo URL</Label>
                     <Input
@@ -186,15 +167,15 @@ export default function UserDetailsModal({ user, open, onClose, onUserDeleted }:
                     <div className="font-medium">{user.name || '—'}</div>
                   </div>
                   <div>
-                    <span className="text-gray-600">Email:</span>
-                    <div className="font-medium">{user.email || '—'}</div>
+                    <span className="text-gray-600">Mobile:</span>
+                    <div className="font-medium">{user.clerk_user_id.replace('phone:', '')}</div>
                   </div>
                   <div>
                     <span className="text-gray-600">User ID:</span>
                     <div className="font-mono text-xs">{user.id}</div>
                   </div>
                   <div>
-                    <span className="text-gray-600">Clerk ID:</span>
+                    <span className="text-gray-600">Mobile Identity:</span>
                     <div className="font-mono text-xs">{user.clerk_user_id}</div>
                   </div>
                   <div>
@@ -228,8 +209,8 @@ export default function UserDetailsModal({ user, open, onClose, onUserDeleted }:
                 <div>
                   <span className="text-sm text-gray-600">Chef Status:</span>
                   <div className="mt-1">
-                    <Badge className={user.chef === 'yes' 
-                      ? 'bg-green-100 text-green-800 border-green-300' 
+                    <Badge className={user.chef === 'yes'
+                      ? 'bg-green-100 text-green-800 border-green-300'
                       : 'bg-purple-100 text-purple-800 border-purple-300'}>
                       {user.chef === 'yes' ? 'Chef' : 'Owner'}
                     </Badge>
@@ -246,27 +227,27 @@ export default function UserDetailsModal({ user, open, onClose, onUserDeleted }:
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">Change Role</Label>
                   <div className="flex flex-col gap-2">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => handleRoleChange('basic')}
                       disabled={user.role === 'basic'}
                       className="justify-start"
                     >
                       Set as Basic
                     </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => handleRoleChange('pro')}
                       disabled={user.role === 'pro'}
                       className="justify-start"
                     >
                       Set as Pro
                     </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => handleRoleChange('admin')}
                       disabled={user.role === 'admin'}
                       className="justify-start"
@@ -280,25 +261,17 @@ export default function UserDetailsModal({ user, open, onClose, onUserDeleted }:
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">Other Actions</Label>
                   <div className="flex flex-col gap-2">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={handleToggleChefStatus}
                       className="justify-start"
                     >
                       Toggle Chef Status
                     </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={handlePasswordChange}
-                      className="justify-start"
-                    >
-                      Change Password
-                    </Button>
-                    <Button 
-                      variant="destructive" 
-                      size="sm" 
+                    <Button
+                      variant="destructive"
+                      size="sm"
                       onClick={() => setShowDeleteConfirm(true)}
                       className="justify-start"
                     >
@@ -345,8 +318,8 @@ export default function UserDetailsModal({ user, open, onClose, onUserDeleted }:
             <Button variant="outline" onClick={() => setShowDeleteConfirm(false)} disabled={isDeleting}>
               Cancel
             </Button>
-            <Button 
-              variant="destructive" 
+            <Button
+              variant="destructive"
               onClick={handleDelete}
               disabled={isDeleting}
             >

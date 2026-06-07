@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 
 export default function SignInPage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
@@ -24,6 +23,21 @@ export default function SignInPage() {
     return "Enter your Indian mobile number";
   }, [cooldown]);
 
+  async function waitForSession() {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const res = await fetch("/api/auth/me", {
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.isSignedIn) return true;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    return false;
+  }
+
   async function sendOtp() {
     setLoading(true);
     setMessage("");
@@ -32,6 +46,7 @@ export default function SignInPage() {
       const res = await fetch("/api/auth/request-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({ phone }),
       });
       const data = await res.json();
@@ -58,6 +73,7 @@ export default function SignInPage() {
       const res = await fetch("/api/auth/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({ phone, otp }),
       });
       const data = await res.json();
@@ -66,8 +82,15 @@ export default function SignInPage() {
         return;
       }
 
+      setMessage("Login verified. Opening dashboard...");
+      const sessionReady = await waitForSession();
+      if (!sessionReady) {
+        setMessage("Login cookie was not confirmed. Please try again.");
+        return;
+      }
+
       const nextPath = searchParams.get("next") || "/dashboard";
-      router.push(nextPath);
+      window.location.replace(nextPath);
     } catch {
       setMessage("Could not verify OTP");
     } finally {

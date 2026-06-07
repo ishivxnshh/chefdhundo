@@ -5,7 +5,7 @@ Welcome to **ChefDhundo** – The ultimate platform bridging the gap between cul
 ## 🚀 Key Features
 
 - **Role-Based Workflows**: Separate, tailored experiences for Chefs and Outlet Owners.
-- **Secure Authentication**: Robust user authentication and session management powered by Clerk.
+- **Secure Authentication**: Mobile OTP authentication with TextBee, Supabase OTP storage, and a first-party HttpOnly session cookie.
 - **Payment Processing**: Seamless, secure transactions integrated with RazorPay and Cashfree.
 - **Resume Management**: Effortless resume generation, uploads, and downloads using jsPDF and html2canvas.
 - **Dynamic Portfolios**: Showcase culinary skills and outlet requirements with beautiful, modern interfaces.
@@ -18,7 +18,7 @@ Welcome to **ChefDhundo** – The ultimate platform bridging the gap between cul
 - **Styling**: Tailwind CSS, Radix UI Primitives
 - **Animations**: Framer Motion, tw-animate-css
 - **Backend / Database**: Supabase (PostgreSQL)
-- **Authentication**: Clerk
+- **Authentication**: Mobile OTP (TextBee + Supabase + custom session cookie)
 - **Payments**: RazorPay
 - **State Management**: Zustand
 - **Deployment**: Vercel
@@ -72,7 +72,7 @@ cp .env.example .env.local
 ```
 
 You will need to populate the environment variables for the following services:
-- **Clerk**: Authentication keys (`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, etc.)
+- **Mobile OTP**: TextBee device/API key plus `OTP_SECRET` and `AUTH_SECRET`
 - **Supabase**: Database connection keys (`SUPABASE_PROJECT_URL`, `SUPABASE_PUBLIC_ANON_KEY`, etc.)
 - **Payment Gateways**: Keys for RazorPay and Cashfree (`RAZORPAY_KEY_ID`, `CASHFREE_CLIENT_ID`, etc.)
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
-import { getUserByClerkId, deleteUser } from '@/lib/supabase/database'
+import { auth } from '@/lib/auth/server'
+import { getUserByIdentityId, deleteUser } from '@/lib/supabase/database'
 
 /**
  * DELETE /api/admin/users/[userId]
@@ -12,10 +12,10 @@ export async function DELETE(
   { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
-    // Get current user from Clerk
-    const { userId: clerkUserId } = await auth()
-    
-    if (!clerkUserId) {
+    // Get current user from the mobile session
+    const { userId: identityId } = await auth()
+
+    if (!identityId) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
@@ -23,8 +23,8 @@ export async function DELETE(
     }
 
     // Verify admin role
-    const currentUserResult = await getUserByClerkId(clerkUserId)
-    
+    const currentUserResult = await getUserByIdentityId(identityId)
+
     if (!currentUserResult.success || !currentUserResult.data) {
       return NextResponse.json(
         { success: false, error: 'User not found' },

@@ -1,251 +1,154 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from "next/server";
+import { auth, ensureUserForPhone, syntheticIdToPhone } from "@/lib/auth/server";
 import {
-  getUserByClerkId,
-  updateUser,
   createUser,
-  getUserByEmail,
-  updateUserByEmail
-} from '@/lib/supabase/database'
-import type { UserUpdate } from '@/types/supabase'
-import { ClerkUserData } from '@/types/supabase'
+  getUserByIdentityId,
+  updateUser,
+} from "@/lib/supabase/database";
+import type { MobileUserData } from "@/types/supabase";
 
-function isMissingUsersTableError(error: string | undefined): boolean {
-  if (!error) return false
-  const normalized = error.toLowerCase()
-  return normalized.includes("could not find the table 'public.users'")
+async function authorizeUserTarget(targetIdentityId: string) {
+  const { userId } = await auth();
+  if (!userId) return { allowed: false, isAdmin: false };
+  if (userId === targetIdentityId) return { allowed: true, isAdmin: false };
+  const requester = await getUserByIdentityId(userId);
+  const isAdmin = requester.success && requester.data?.role === "admin";
+  return { allowed: Boolean(isAdmin), isAdmin: Boolean(isAdmin) };
 }
 
-function isUsersPermissionError(error: string | undefined): boolean {
-  if (!error) return false
-  const normalized = error.toLowerCase()
-  return normalized.includes('permission denied') && normalized.includes('users')
-}
-
-// GET /api/user-supabase?clerk_id=xxx
 export async function GET(request: NextRequest) {
   try {
-    const searchParams = request.nextUrl.searchParams
-    const clerkId = searchParams.get('clerk_id')
-
-    if (!clerkId) {
+    const identityId =
+      request.nextUrl.searchParams.get("identity_id") ||
+      request.nextUrl.searchParams.get("identity_id");
+    if (!identityId) {
       return NextResponse.json(
-        { success: false, error: 'clerk_id is required' },
+        { success: false, error: "identity_id is required" },
         { status: 400 }
-      )
+      );
     }
 
-    const result = await getUserByClerkId(clerkId)
-    
-    if (!result.success) {
-      if (isMissingUsersTableError(result.error)) {
-        return NextResponse.json(
-          {
-            success: true,
-            data: null,
-            schemaReady: false,
-            message: 'Users table is not initialized in Supabase yet',
-          },
-          { status: 200 }
-        )
-      }
-
-      if (isUsersPermissionError(result.error)) {
-        return NextResponse.json(
-          {
-            success: false,
-            data: null,
-            error: 'Supabase role cannot read users table. Check RLS policies or SUPABASE_SERVICE_ROLE in deployment env.',
-            schemaReady: false,
-          },
-          { status: 503 }
-        )
-      }
-
-      // Return 200 with success: false for "user not found" cases
-      // This allows the frontend to handle it gracefully
+    const authorization = await authorizeUserTarget(identityId);
+    if (!authorization.allowed) {
       return NextResponse.json(
-        { success: false, error: result.error, data: null },
-        { status: 200 }
-      )
+        { success: false, error: "Forbidden" },
+        { status: 403 }
+      );
     }
 
-    return NextResponse.json({
-      success: true,
-      data: result.data
-    })
+    const phone = syntheticIdToPhone(identityId);
+    const user = phone
+      ? await ensureUserForPhone(phone)
+      : (await getUserByIdentityId(identityId)).data;
+    return NextResponse.json({ success: true, data: user || null });
   } catch (error) {
-    console.error('Error in GET /api/user-supabase:', error)
+    console.error(
+      "GET /api/user-supabase failed:",
+      error instanceof Error ? error.message : String(error)
+    );
     return NextResponse.json(
-      { success: false, error: 'Internal server error' },
+      { success: false, error: "Internal server error" },
       { status: 500 }
-    )
+    );
   }
 }
 
-// POST /api/user-supabase - Create user
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { clerk_user_id, name, email, photo } = body
-
-    if (!clerk_user_id || !name || !email) {
+    const body = await request.json();
+    const identityId = body.identity_id || body.clerk_user_id;
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    if (!identityId || !name) {
       return NextResponse.json(
-        { success: false, error: 'clerk_user_id, name, and email are required' },
+        { success: false, error: "identity_id and name are required" },
         { status: 400 }
-      )
+      );
     }
 
-    const userData: ClerkUserData = {
-      clerk_user_id,
+    const authorization = await authorizeUserTarget(identityId);
+    if (!authorization.allowed) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden" },
+        { status: 403 }
+      );
+    }
+
+    const phone = syntheticIdToPhone(identityId);
+    if (phone) {
+      const user = await ensureUserForPhone(phone);
+      return NextResponse.json({ success: true, data: user }, { status: 200 });
+    }
+
+    const userData: MobileUserData = {
+      clerk_user_id: identityId,
       name,
-      email,
-      photo: photo || null
-    }
-
-    const result = await createUser(userData)
-
-    if (!result.success) {
-      const errorMessage = result.error || 'Failed to create user'
-
-      if (isMissingUsersTableError(errorMessage)) {
-        return NextResponse.json(
-          {
-            success: false,
-            schemaReady: false,
-            error: 'Users table is not initialized in Supabase yet',
-          },
-          { status: 503 }
-        )
-      }
-
-      if (isUsersPermissionError(errorMessage)) {
-        return NextResponse.json(
-          {
-            success: false,
-            schemaReady: false,
-            error: 'Supabase role cannot write users table. Check RLS policies or SUPABASE_SERVICE_ROLE in deployment env.',
-          },
-          { status: 503 }
-        )
-      }
-
-      if (errorMessage.includes('users_email_key')) {
-        const existingUser = await getUserByEmail(email)
-
-        if (existingUser.success && existingUser.data) {
-          const updates: Partial<UserUpdate> = {}
-
-          if (existingUser.data.clerk_user_id !== clerk_user_id) {
-            updates.clerk_user_id = clerk_user_id
-          }
-
-          const trimmedName = name.trim()
-          if (trimmedName && trimmedName !== existingUser.data.name) {
-            updates.name = trimmedName
-          }
-
-          if (photo !== undefined) {
-            const normalizedPhoto = photo ?? null
-            if (normalizedPhoto !== existingUser.data.photo) {
-              updates.photo = normalizedPhoto
-            }
-          }
-
-          const reconciliation = Object.keys(updates).length > 0
-            ? await updateUserByEmail(email, updates)
-            : existingUser
-
-          if (reconciliation.success && reconciliation.data) {
-            return NextResponse.json(
-              { success: true, data: reconciliation.data, reconciled: true },
-              { status: 200 }
-            )
-          }
-
-          return NextResponse.json(
-            { success: false, error: reconciliation.error || 'Failed to reconcile existing user' },
-            { status: 400 }
-          )
-        }
-
-        return NextResponse.json(
-          { success: false, error: 'User with this email already exists but could not be fetched' },
-          { status: 400 }
-        )
-      }
-
-      return NextResponse.json(
-        { success: false, error: errorMessage },
-        { status: 400 }
-      )
-    }
-
+      photo: body.photo ?? null,
+    };
+    const result = await createUser(userData);
     return NextResponse.json(
-      { success: true, data: result.data },
-      { status: 201 }
-    )
+      { success: result.success, data: result.data, error: result.error },
+      { status: result.success ? 201 : 400 }
+    );
   } catch (error) {
-    console.error('Error in POST /api/user-supabase:', error)
+    console.error(
+      "POST /api/user-supabase failed:",
+      error instanceof Error ? error.message : String(error)
+    );
     return NextResponse.json(
-      { success: false, error: 'Internal server error' },
+      { success: false, error: "Internal server error" },
       { status: 500 }
-    )
+    );
   }
 }
 
-// PUT /api/user-supabase - Update user
 export async function PUT(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { clerk_user_id, ...updates } = body
-
-    if (!clerk_user_id) {
+    const body = await request.json();
+    const identityId = body.identity_id || body.clerk_user_id;
+    if (!identityId) {
       return NextResponse.json(
-        { success: false, error: 'clerk_user_id is required' },
+        { success: false, error: "identity_id is required" },
         { status: 400 }
-      )
+      );
     }
 
-    const result = await updateUser(clerk_user_id, updates)
-    
-    if (!result.success) {
-      if (isMissingUsersTableError(result.error)) {
-        return NextResponse.json(
-          {
-            success: false,
-            schemaReady: false,
-            error: 'Users table is not initialized in Supabase yet',
-          },
-          { status: 503 }
-        )
-      }
-
-      if (isUsersPermissionError(result.error)) {
-        return NextResponse.json(
-          {
-            success: false,
-            schemaReady: false,
-            error: 'Supabase role cannot update users table. Check RLS policies or SUPABASE_SERVICE_ROLE in deployment env.',
-          },
-          { status: 503 }
-        )
-      }
-
+    const authorization = await authorizeUserTarget(identityId);
+    if (!authorization.allowed) {
       return NextResponse.json(
-        { success: false, error: result.error },
-        { status: 400 }
-      )
+        { success: false, error: "Forbidden" },
+        { status: 403 }
+      );
     }
 
-    return NextResponse.json({
-      success: true,
-      data: result.data
-    })
-  } catch (error) {
-    console.error('Error in PUT /api/user-supabase:', error)
+    const updates = {
+      ...(typeof body.name === "string" ? { name: body.name.trim() } : {}),
+      ...(body.photo !== undefined ? { photo: body.photo } : {}),
+      ...(body.chef !== undefined ? { chef: body.chef } : {}),
+      ...(body.role !== undefined ? { role: body.role } : {}),
+    };
+    if (!authorization.isAdmin) {
+      const allowed = new Set(["name", "photo", "chef"]);
+      if (Object.keys(updates).some((key) => !allowed.has(key))) {
+        return NextResponse.json(
+          { success: false, error: "Forbidden update field" },
+          { status: 403 }
+        );
+      }
+    }
+
+    const result = await updateUser(identityId, updates);
     return NextResponse.json(
-      { success: false, error: 'Internal server error' },
+      { success: result.success, data: result.data, error: result.error },
+      { status: result.success ? 200 : 400 }
+    );
+  } catch (error) {
+    console.error(
+      "PUT /api/user-supabase failed:",
+      error instanceof Error ? error.message : String(error)
+    );
+    return NextResponse.json(
+      { success: false, error: "Internal server error" },
       { status: 500 }
-    )
+    );
   }
 }

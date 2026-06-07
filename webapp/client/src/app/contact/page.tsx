@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 export default function ContactPage() {
   const [formData, setFormData] = useState({
     name: '',
-    email: '',
+    phone: '',
     subject: '',
     message: ''
   });
@@ -30,13 +30,12 @@ export default function ContactPage() {
 
     try {
       // Here you would typically send the form data to your backend
-      console.log('Contact form submitted:', formData);
-      
+
       // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
+
       toast.success('Thank you for your message! We will get back to you soon.');
-      setFormData({ name: '', email: '', subject: '', message: '' });
+      setFormData({ name: '', phone: '', subject: '', message: '' });
     } catch {
       toast.error('Failed to send message. Please try again.');
     } finally {
@@ -65,17 +64,7 @@ export default function ContactPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
-                    <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900">Email</p>
-                    <p className="text-gray-600">contact@ihmgurukul.com</p>
-                  </div>
-                </div>
+
 
                 <div className="flex items-center space-x-3">
                   <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
@@ -154,18 +143,18 @@ export default function ContactPage() {
                 </div>
 
                 <div>
-                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                    Email Address *
+                  <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
+                    Mobile Number *
                   </label>
                   <Input
-                    id="email"
-                    name="email"
-                    type="email"
+                    id="phone"
+                    name="phone"
+                    type="tel"
                     required
-                    value={formData.email}
+                    value={formData.phone}
                     onChange={handleInputChange}
                     className="w-full"
-                    placeholder="Enter your email address"
+                    placeholder="Enter your mobile number"
                   />
                 </div>
 
@@ -250,7 +239,7 @@ export default function ContactPage() {
                   </CardHeader>
                   <CardContent>
                     <p className="text-gray-600">
-                      After logging in using your Google Sign-In, click on “Submit Resume” and fill out all the required details. Once submitted, a success message will appear. You can also edit or complete your profile anytime from the “My Dashboard” section.
+                      After logging in using your mobile number and OTP, click on “Submit Resume” and fill out all the required details. Once submitted, a success message will appear. You can also edit or complete your profile anytime from the “My Dashboard” section.
                     </p>
                   </CardContent>
                 </Card>
@@ -339,7 +328,6 @@ export default function ContactPage() {
                   <CardContent className="text-gray-600 space-y-2">
                     <p>You can reach out to our support team anytime:</p>
                     <p>📞 Phone: +91 8826147981</p>
-                    <p>📧 Email: contact@ihmgurukul.com</p>
                   </CardContent>
                 </Card>
 
@@ -349,7 +337,7 @@ export default function ContactPage() {
                   </CardHeader>
                   <CardContent>
                     <p className="text-gray-600">
-                      Once your payment is successful, you’ll receive a confirmation email from ChefDhundo. Additionally, an SMS reminder will be sent to you before your subscription renewal date.
+                      Once your payment is successful, you’ll receive a confirmation message from ChefDhundo. An SMS reminder will also be sent to you before your subscription renewal date.
                     </p>
                   </CardContent>
                 </Card>

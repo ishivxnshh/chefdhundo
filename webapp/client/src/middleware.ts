@@ -2,12 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 
 type SessionPayload = {
   sub: string;
-  role: "basic" | "pro" | "admin";
   phone: string;
 };
 
 const protectedPrefixes = ["/dashboard", "/admin"];
-const adminPrefixes = ["/admin", "/api/admin"];
 const authCookieName = "chef_auth";
 
 function base64UrlToUint8Array(base64Url: string) {
@@ -60,7 +58,7 @@ async function verifyHs256Jwt(token: string, secret: string): Promise<SessionPay
     new TextDecoder().decode(base64UrlToUint8Array(payloadPart))
   );
 
-  if (!payload || !payload.sub || !payload.phone || !payload.role) {
+  if (!payload || !payload.sub || !payload.phone) {
     return null;
   }
 
@@ -69,7 +67,7 @@ async function verifyHs256Jwt(token: string, secret: string): Promise<SessionPay
     if (payload.exp < now) return null;
   }
 
-  return { sub: payload.sub, role: payload.role, phone: payload.phone };
+  return { sub: payload.sub, phone: payload.phone };
 }
 
 async function readSession(req: NextRequest): Promise<SessionPayload | null> {
@@ -86,14 +84,10 @@ function isPathProtected(pathname: string) {
   return protectedPrefixes.some((prefix) => pathname.startsWith(prefix));
 }
 
-function isAdminPath(pathname: string) {
-  return adminPrefixes.some((prefix) => pathname.startsWith(prefix));
-}
-
 export default async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  if (!isPathProtected(pathname) && !isAdminPath(pathname)) {
+  if (!isPathProtected(pathname) && !pathname.startsWith("/api/admin")) {
     return NextResponse.next();
   }
 
@@ -103,13 +97,6 @@ export default async function middleware(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
     return NextResponse.redirect(new URL("/sign-in", req.url));
-  }
-
-  if (isAdminPath(pathname) && session.role !== "admin") {
-    if (pathname.startsWith("/api/")) {
-      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
-    }
-    return NextResponse.redirect(new URL("/dashboard", req.url));
   }
 
   return NextResponse.next();

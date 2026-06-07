@@ -2,28 +2,52 @@ import { cookies } from "next/headers";
 import { jwtVerify, SignJWT } from "jose";
 import crypto from "crypto";
 import { supabaseAdmin } from "@/lib/supabase/supabase";
+import {
+  AUTH_COOKIE_NAME,
+  authCookieOptions,
+  hashRequestIp,
+  normalizeIndianPhone,
+  phoneToSyntheticId,
+  syntheticIdToPhone,
+} from "./core";
 
-export const AUTH_COOKIE_NAME = "chef_auth";
+export {
+  AUTH_COOKIE_NAME,
+  authCookieOptions,
+  hashRequestIp,
+  normalizeIndianPhone,
+  phoneToSyntheticId,
+  syntheticIdToPhone,
+};
+
 const OTP_TTL_MS = 5 * 60 * 1000;
 const OTP_REQUEST_COOLDOWN_MS = 60 * 1000;
 const OTP_MAX_ATTEMPTS = 5;
+const OTP_IP_HOURLY_LIMIT = 10;
+const OTP_PHONE_DAILY_LIMIT = 10;
+const OTP_GLOBAL_DAILY_LIMIT = 500;
 const ADMIN_BOOTSTRAP_PHONE = "+919360804740";
-const memoryOtpStore = new Map<
-  string,
-  { otpHash: string; expiresAt: number; attempts: number; createdAt: number }
->();
-let otpStorageMode: "supabase" | "memory" = "supabase";
 
 type UserRole = "basic" | "pro" | "admin";
 
 export type SessionPayload = {
   sub: string;
   phone: string;
-  role: UserRole;
-  name?: string;
-  email?: string | null;
   iat?: number;
   exp?: number;
+};
+
+export type MobileAuthUser = {
+  id: string;
+  fullName: string;
+  firstName: string | null;
+  lastName: string | null;
+  imageUrl: string | null;
+  primaryPhoneNumber: { id: string; phoneNumber: string };
+  primaryPhoneNumberId: string;
+  publicMetadata: { role: UserRole };
+  unsafeMetadata: Record<string, never>;
+  reload: () => Promise<void>;
 };
 
 type AuthResult = {
@@ -36,57 +60,32 @@ type AuthResult = {
   };
 };
 
-type ClerkCompatUser = {
-  id: string;
-  firstName: string | null;
-  lastName: string | null;
-  fullName: string | null;
-  imageUrl: string | null;
-  emailAddresses: { id: string; emailAddress: string }[];
-  primaryEmailAddressId: string;
-  primaryEmailAddress: { id: string; emailAddress: string };
-  primaryPhoneNumber: { id: string; phoneNumber: string } | null;
-  primaryPhoneNumberId: string | null;
-  unsafeMetadata: Record<string, never>;
-  publicMetadata: { role: UserRole };
-  reload: () => Promise<void>;
+type MemoryOtp = {
+  otpHash: string;
+  expiresAt: number;
+  attempts: number;
+  createdAt: number;
 };
+
+const memoryOtpStore = new Map<string, MemoryOtp>();
 
 function getAuthSecret() {
   const secret = process.env.AUTH_SECRET;
-  if (!secret) {
-    throw new Error("AUTH_SECRET is missing");
-  }
+  if (!secret) throw new Error("AUTH_SECRET is missing");
   return new TextEncoder().encode(secret);
 }
 
 function getOtpSecret() {
   const secret = process.env.OTP_SECRET;
-  if (!secret) {
-    throw new Error("OTP_SECRET is missing");
-  }
+  if (!secret) throw new Error("OTP_SECRET is missing");
   return secret;
 }
 
-export function normalizeIndianPhone(phone: string) {
-  const cleaned = String(phone || "").trim().replace(/[^\d+]/g, "");
-  if (/^\+91[6-9]\d{9}$/.test(cleaned)) return cleaned;
-  if (/^[6-9]\d{9}$/.test(cleaned)) return `+91${cleaned}`;
-  return null;
-}
-
-export function phoneToSyntheticId(phone: string) {
-  return `phone:${phone}`;
-}
-
-export function syntheticIdToPhone(id: string | null | undefined) {
-  if (!id || !id.startsWith("phone:+91")) return null;
-  const phone = id.replace("phone:", "");
-  return normalizeIndianPhone(phone);
-}
-
-export function createOtp() {
-  return String(crypto.randomInt(100000, 1000000));
+function allowMemoryOtpFallback() {
+  return (
+    process.env.NODE_ENV !== "production" &&
+    process.env.OTP_ALLOW_MEMORY_FALLBACK === "true"
+  );
 }
 
 function hashOtp(phone: string, otp: string) {
@@ -96,96 +95,99 @@ function hashOtp(phone: string, otp: string) {
     .digest("hex");
 }
 
-function isMissingOtpTableError(errorMessage?: string) {
+function isOtpTableUnavailable(errorMessage?: string) {
   const message = String(errorMessage || "").toLowerCase();
   return message.includes("public.phone_otps") || message.includes("schema cache");
 }
 
-function canRequestOtpInMemory(phone: string) {
-  const saved = memoryOtpStore.get(phone);
-  if (!saved) return true;
-  return Date.now() - saved.createdAt > OTP_REQUEST_COOLDOWN_MS;
-}
-
-function saveOtpInMemory(phone: string, otp: string) {
-  memoryOtpStore.set(phone, {
-    otpHash: hashOtp(phone, otp),
-    expiresAt: Date.now() + OTP_TTL_MS,
-    attempts: 0,
-    createdAt: Date.now(),
-  });
-}
-
-function verifyOtpInMemory(phone: string, otp: string) {
-  const saved = memoryOtpStore.get(phone);
-  if (!saved) return false;
-
-  if (Date.now() > saved.expiresAt || saved.attempts >= OTP_MAX_ATTEMPTS) {
-    memoryOtpStore.delete(phone);
-    return false;
+function handleOtpStorageError(errorMessage: string) {
+  if (isOtpTableUnavailable(errorMessage) && allowMemoryOtpFallback()) {
+    return "memory" as const;
   }
-
-  const incomingHash = hashOtp(phone, otp);
-  if (incomingHash !== saved.otpHash) {
-    saved.attempts += 1;
-    return false;
-  }
-
-  memoryOtpStore.delete(phone);
-  return true;
+  throw new Error(`OTP storage unavailable: ${errorMessage}`);
 }
 
-async function cleanupOldOtps(phone: string) {
+export function createOtp() {
+  return String(crypto.randomInt(100000, 1000000));
+}
+
+export function getRequestIp(request: Request) {
+  const forwarded = request.headers.get("x-forwarded-for");
+  return forwarded?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "unknown";
+}
+
+export function getRequestIpHash(request: Request) {
+  return hashRequestIp(getRequestIp(request), getOtpSecret());
+}
+
+export async function checkOtpRequestAllowed(phone: string, ipHash: string) {
+  // Supabase generated types may lag behind staged production migrations.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const admin = supabaseAdmin as any;
-  await admin
-    .from("phone_otps")
-    .delete()
-    .or(`phone.eq.${phone},expires_at.lt.${new Date().toISOString()}`);
+  const now = Date.now();
+  const hourAgo = new Date(now - 60 * 60 * 1000).toISOString();
+  const dayAgo = new Date(now - 24 * 60 * 60 * 1000).toISOString();
+
+  const [latest, phoneDaily, ipHourly, globalDaily] = await Promise.all([
+    admin
+      .from("phone_otps")
+      .select("created_at")
+      .eq("phone", phone)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    admin
+      .from("phone_otps")
+      .select("id", { count: "exact", head: true })
+      .eq("phone", phone)
+      .gte("created_at", dayAgo),
+    admin
+      .from("phone_otps")
+      .select("id", { count: "exact", head: true })
+      .eq("request_ip_hash", ipHash)
+      .gte("created_at", hourAgo),
+    admin
+      .from("phone_otps")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", dayAgo),
+  ]);
+
+  for (const result of [latest, phoneDaily, ipHourly, globalDaily]) {
+    if (result.error) {
+      const mode = handleOtpStorageError(result.error.message);
+      if (mode === "memory") {
+        const saved = memoryOtpStore.get(phone);
+        return {
+          allowed: !saved || now - saved.createdAt > OTP_REQUEST_COOLDOWN_MS,
+          reason: "cooldown" as const,
+        };
+      }
+    }
+  }
+
+  if (
+    latest.data?.created_at &&
+    now - new Date(latest.data.created_at).getTime() <= OTP_REQUEST_COOLDOWN_MS
+  ) {
+    return { allowed: false, reason: "cooldown" as const };
+  }
+  if ((phoneDaily.count || 0) >= OTP_PHONE_DAILY_LIMIT) {
+    return { allowed: false, reason: "phone_daily_limit" as const };
+  }
+  if ((ipHourly.count || 0) >= OTP_IP_HOURLY_LIMIT) {
+    return { allowed: false, reason: "ip_hourly_limit" as const };
+  }
+  if ((globalDaily.count || 0) >= OTP_GLOBAL_DAILY_LIMIT) {
+    return { allowed: false, reason: "global_daily_limit" as const };
+  }
+  return { allowed: true, reason: null };
 }
 
-export async function canRequestOtp(phone: string) {
-  if (otpStorageMode === "memory") {
-    return canRequestOtpInMemory(phone);
-  }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const admin = supabaseAdmin as any;
-  const { data, error } = await admin
-    .from("phone_otps")
-    .select("created_at")
-    .eq("phone", phone)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
-    if (isMissingOtpTableError(error.message)) {
-      otpStorageMode = "memory";
-      return canRequestOtpInMemory(phone);
-    }
-    throw new Error(`OTP table read failed: ${error.message}`);
-  }
-
-  if (!data?.created_at) return true;
-  return Date.now() - new Date(data.created_at).getTime() > OTP_REQUEST_COOLDOWN_MS;
+export async function canRequestOtp(phone: string, ipHash = "unknown") {
+  return (await checkOtpRequestAllowed(phone, ipHash)).allowed;
 }
 
-export async function saveOtp(phone: string, otp: string) {
-  if (otpStorageMode === "memory") {
-    saveOtpInMemory(phone, otp);
-    return;
-  }
-  try {
-    await cleanupOldOtps(phone);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (isMissingOtpTableError(message)) {
-      otpStorageMode = "memory";
-      saveOtpInMemory(phone, otp);
-      return;
-    }
-    throw error;
-  }
+export async function saveOtp(phone: string, otp: string, ipHash = "unknown") {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const admin = supabaseAdmin as any;
   const payload = {
@@ -193,50 +195,94 @@ export async function saveOtp(phone: string, otp: string) {
     otp_hash: hashOtp(phone, otp),
     expires_at: new Date(Date.now() + OTP_TTL_MS).toISOString(),
     attempts: 0,
+    request_ip_hash: ipHash,
+    provider_status: "pending",
   };
-  const { error } = await admin.from("phone_otps").insert(payload);
+  const { data, error } = await admin
+    .from("phone_otps")
+    .insert(payload)
+    .select("id")
+    .single();
+
   if (error) {
-    if (isMissingOtpTableError(error.message)) {
-      otpStorageMode = "memory";
-      saveOtpInMemory(phone, otp);
-      return;
+    const mode = handleOtpStorageError(error.message);
+    if (mode === "memory") {
+      memoryOtpStore.set(phone, {
+        otpHash: payload.otp_hash,
+        expiresAt: Date.now() + OTP_TTL_MS,
+        attempts: 0,
+        createdAt: Date.now(),
+      });
+      return null;
     }
-    throw new Error(`OTP save failed: ${error.message}`);
   }
+  return data?.id || null;
+}
+
+export async function updateOtpDelivery(
+  id: string | null,
+  updates: {
+    provider_message_id?: string | null;
+    provider_status?: string | null;
+    provider_error?: string | null;
+    accepted_at?: string | null;
+  }
+) {
+  if (!id) return;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const admin = supabaseAdmin as any;
+  const { error } = await admin.from("phone_otps").update(updates).eq("id", id);
+  if (error) throw new Error(`OTP status update failed: ${error.message}`);
+}
+
+export async function invalidateOtp(id: string | null, phone: string) {
+  if (!id) {
+    memoryOtpStore.delete(phone);
+    return;
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const admin = supabaseAdmin as any;
+  const { error } = await admin.from("phone_otps").delete().eq("id", id);
+  if (error) throw new Error(`OTP invalidation failed: ${error.message}`);
 }
 
 export async function verifyOtp(phone: string, otp: string) {
-  if (otpStorageMode === "memory") {
-    return verifyOtpInMemory(phone, otp);
-  }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const admin = supabaseAdmin as any;
   const { data, error } = await admin
     .from("phone_otps")
     .select("id, otp_hash, expires_at, attempts")
     .eq("phone", phone)
+    .is("verified_at", null)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 
   if (error) {
-    if (isMissingOtpTableError(error.message)) {
-      otpStorageMode = "memory";
-      return verifyOtpInMemory(phone, otp);
+    const mode = handleOtpStorageError(error.message);
+    if (mode === "memory") {
+      const saved = memoryOtpStore.get(phone);
+      if (!saved || saved.expiresAt < Date.now() || saved.attempts >= OTP_MAX_ATTEMPTS) {
+        memoryOtpStore.delete(phone);
+        return false;
+      }
+      if (saved.otpHash !== hashOtp(phone, otp)) {
+        saved.attempts += 1;
+        return false;
+      }
+      memoryOtpStore.delete(phone);
+      return true;
     }
-    throw new Error(`OTP verify lookup failed: ${error.message}`);
   }
   if (!data) return false;
 
-  const now = Date.now();
-  const expiresAt = new Date(data.expires_at).getTime();
-  if (now > expiresAt || data.attempts >= OTP_MAX_ATTEMPTS) {
-    await admin.from("phone_otps").delete().eq("id", data.id);
+  if (
+    new Date(data.expires_at).getTime() < Date.now() ||
+    data.attempts >= OTP_MAX_ATTEMPTS
+  ) {
     return false;
   }
-
-  const incomingHash = hashOtp(phone, otp);
-  if (incomingHash !== data.otp_hash) {
+  if (data.otp_hash !== hashOtp(phone, otp)) {
     await admin
       .from("phone_otps")
       .update({ attempts: (data.attempts || 0) + 1 })
@@ -244,210 +290,146 @@ export async function verifyOtp(phone: string, otp: string) {
     return false;
   }
 
-  await admin.from("phone_otps").delete().eq("id", data.id);
+  await admin
+    .from("phone_otps")
+    .update({ verified_at: new Date().toISOString(), provider_status: "verified" })
+    .eq("id", data.id);
   return true;
 }
 
-function splitName(name: string | null | undefined) {
+function isGeneratedPhoneName(name: string | null | undefined, phone: string) {
   const trimmed = (name || "").trim();
-  if (!trimmed) return { firstName: null, lastName: null };
-  const parts = trimmed.split(/\s+/);
+  return !trimmed || trimmed === `User ${phone}` || trimmed === "Unknown User";
+}
+
+function splitName(name: string) {
+  const parts = name.trim().split(/\s+/);
   return {
-    firstName: parts[0] ?? null,
+    firstName: parts[0] || null,
     lastName: parts.length > 1 ? parts.slice(1).join(" ") : null,
   };
 }
 
-function buildFallbackEmail(phone: string) {
-  return `${phone.replace("+", "")}@phone.chefdhundo.com`;
-}
-
 export async function ensureUserForPhone(phone: string) {
-  const syntheticId = phoneToSyntheticId(phone);
+  const normalized = normalizeIndianPhone(phone);
+  if (!normalized) throw new Error("Invalid mobile number");
+  const identityId = phoneToSyntheticId(normalized);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const admin = supabaseAdmin as any;
 
   const { data: existing, error: lookupError } = await admin
     .from("users")
     .select("*")
-    .eq("clerk_user_id", syntheticId)
+    .eq("clerk_user_id", identityId)
     .maybeSingle();
-
-  if (lookupError) {
-    throw new Error(`User lookup failed: ${lookupError.message}`);
-  }
+  if (lookupError) throw new Error(`User lookup failed: ${lookupError.message}`);
 
   if (existing) {
-    if (phone === ADMIN_BOOTSTRAP_PHONE && existing.role !== "admin") {
-      const { data: promoted, error: promoteError } = await admin
-        .from("users")
-        .update({ role: "admin" })
-        .eq("id", existing.id)
-        .select("*")
-        .single();
-
-      if (promoteError) {
-        throw new Error(`Admin bootstrap failed: ${promoteError.message}`);
-      }
-      return promoted;
+    const updates: Record<string, string> = {};
+    if (normalized === ADMIN_BOOTSTRAP_PHONE && existing.role !== "admin") {
+      updates.role = "admin";
     }
-    return existing;
+    if (isGeneratedPhoneName(existing.name, normalized)) updates.name = normalized;
+    if (Object.keys(updates).length === 0) return existing;
+
+    const { data: updated, error } = await admin
+      .from("users")
+      .update(updates)
+      .eq("id", existing.id)
+      .select("*")
+      .single();
+    if (error) throw new Error(`User repair failed: ${error.message}`);
+    return updated;
   }
 
-  const role: UserRole = phone === ADMIN_BOOTSTRAP_PHONE ? "admin" : "basic";
-  const email = buildFallbackEmail(phone);
-
-  const { data: created, error: createError } = await admin
+  const { data: created, error } = await admin
     .from("users")
     .insert({
-      clerk_user_id: syntheticId,
-      name: `User ${phone}`,
-      email,
-      role,
+      clerk_user_id: identityId,
+      name: normalized,
+      role: normalized === ADMIN_BOOTSTRAP_PHONE ? "admin" : "basic",
       chef: "no",
     })
     .select("*")
     .single();
-
-  if (createError) {
-    throw new Error(`User create failed: ${createError.message}`);
-  }
-
+  if (error) throw new Error(`User create failed: ${error.message}`);
   return created;
 }
 
 export async function createLoginToken(phone: string) {
-  const user = await ensureUserForPhone(phone);
-  const payload: SessionPayload = {
+  const normalized = normalizeIndianPhone(phone);
+  if (!normalized) throw new Error("Invalid mobile number");
+  const user = await ensureUserForPhone(normalized);
+  const token = await new SignJWT({
     sub: user.clerk_user_id,
-    phone,
-    role: user.role as UserRole,
-    name: user.name,
-    email: user.email,
-  };
-
-  const token = await new SignJWT(payload)
+    phone: normalized,
+  })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("7d")
     .sign(getAuthSecret());
-
   return { token, user };
 }
 
 export async function verifyLoginToken(token: string) {
   try {
     const { payload } = await jwtVerify(token, getAuthSecret());
-    const p = payload as SessionPayload;
-    if (!p.sub || !p.phone) return null;
-    return p;
+    const session = payload as SessionPayload;
+    if (!session.sub || !session.phone || phoneToSyntheticId(session.phone) !== session.sub) {
+      return null;
+    }
+    return session;
   } catch {
     return null;
   }
 }
 
-export async function auth(): Promise<AuthResult> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-  if (!token) return { userId: null };
-
-  const payload = await verifyLoginToken(token);
-  if (!payload) return { userId: null };
-
-  return {
-    userId: payload.sub,
-    sessionClaims: {
-      role: payload.role,
-      phone: payload.phone,
-      metadata: { role: payload.role },
-      publicMetadata: { role: payload.role },
-    },
-  };
-}
-
 export async function getSessionFromCookie() {
   const cookieStore = await cookies();
   const token = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-  if (!token) return null;
-  return verifyLoginToken(token);
+  return token ? verifyLoginToken(token) : null;
 }
 
-export async function currentUser(): Promise<ClerkCompatUser | null> {
+export async function getCurrentDbUser() {
   const session = await getSessionFromCookie();
   if (!session) return null;
+  return ensureUserForPhone(session.phone);
+}
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const admin = supabaseAdmin as any;
-  const { data: dbUser } = await admin
-    .from("users")
-    .select("*")
-    .eq("clerk_user_id", session.sub)
-    .maybeSingle();
-
-  const displayName = dbUser?.name || session.name || `User ${session.phone}`;
-  const email = dbUser?.email || session.email || buildFallbackEmail(session.phone);
-  const role = (dbUser?.role || session.role) as UserRole;
-  const names = splitName(displayName);
-
+export async function auth(): Promise<AuthResult> {
+  const session = await getSessionFromCookie();
+  if (!session) return { userId: null };
+  const user = await ensureUserForPhone(session.phone);
+  const role = (user.role || "basic") as UserRole;
   return {
-    id: session.sub,
-    firstName: names.firstName,
-    lastName: names.lastName,
-    fullName: displayName,
-    imageUrl: dbUser?.photo ?? null,
-    emailAddresses: [{ id: "primary", emailAddress: email }],
-    primaryEmailAddressId: "primary",
-    primaryEmailAddress: { id: "primary", emailAddress: email },
-    primaryPhoneNumber: { id: "primary_phone", phoneNumber: session.phone },
-    primaryPhoneNumberId: "primary_phone",
-    unsafeMetadata: {},
-    publicMetadata: { role },
-    reload: async () => {},
+    userId: session.sub,
+    sessionClaims: {
+      role,
+      phone: session.phone,
+      metadata: { role },
+      publicMetadata: { role },
+    },
   };
 }
 
-export async function clerkClient() {
+export async function currentUser(): Promise<MobileAuthUser | null> {
+  const session = await getSessionFromCookie();
+  if (!session) return null;
+  const user = await ensureUserForPhone(session.phone);
+  const fullName = isGeneratedPhoneName(user.name, session.phone)
+    ? session.phone
+    : user.name.trim();
+  const names = splitName(fullName);
   return {
-    users: {
-      getUser: async (userId: string) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const admin = supabaseAdmin as any;
-        const { data, error } = await admin
-          .from("users")
-          .select("*")
-          .eq("clerk_user_id", userId)
-          .maybeSingle();
-
-        if (!data) {
-          const phone = syntheticIdToPhone(userId);
-          if (!phone) {
-            throw new Error(error?.message || "User not found");
-          }
-          return {
-            id: userId,
-            firstName: "User",
-            lastName: null,
-            imageUrl: null,
-            primaryEmailAddressId: "primary",
-            emailAddresses: [{ id: "primary", emailAddress: buildFallbackEmail(phone) }],
-            primaryPhoneNumberId: "primary_phone",
-            primaryPhoneNumber: { id: "primary_phone", phoneNumber: phone },
-          };
-        }
-
-        const phone = syntheticIdToPhone(data.clerk_user_id);
-        const nameParts = splitName(data.name);
-        return {
-          id: data.clerk_user_id,
-          firstName: nameParts.firstName,
-          lastName: nameParts.lastName,
-          imageUrl: data.photo ?? null,
-          primaryEmailAddressId: "primary",
-          emailAddresses: [{ id: "primary", emailAddress: data.email }],
-          primaryPhoneNumberId: phone ? "primary_phone" : null,
-          primaryPhoneNumber: phone ? { id: "primary_phone", phoneNumber: phone } : null,
-        };
-      },
-    },
+    id: session.sub,
+    fullName,
+    firstName: names.firstName,
+    lastName: names.lastName,
+    imageUrl: user.photo ?? null,
+    primaryPhoneNumber: { id: "primary_phone", phoneNumber: session.phone },
+    primaryPhoneNumberId: "primary_phone",
+    publicMetadata: { role: (user.role || "basic") as UserRole },
+    unsafeMetadata: {},
+    reload: async () => {},
   };
 }

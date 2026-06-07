@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS public.resumes (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
-  email TEXT NOT NULL,
+  email TEXT,
   phone TEXT,
   user_location TEXT,
   age_range TEXT,
@@ -158,6 +158,10 @@ ALTER TABLE public.resumes ADD COLUMN IF NOT EXISTS claimed BOOLEAN DEFAULT true
 ALTER TABLE public.resumes ADD COLUMN IF NOT EXISTS claim_token TEXT;
 ALTER TABLE public.resumes ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
 ALTER TABLE public.resumes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+-- Legacy email columns stay nullable for rollback-safe compatibility.
+ALTER TABLE public.users ALTER COLUMN email DROP NOT NULL;
+ALTER TABLE public.resumes ALTER COLUMN email DROP NOT NULL;
 
 -- Add/resync foreign key safely if missing
 DO $$

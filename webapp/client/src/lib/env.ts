@@ -1,21 +1,16 @@
 export const env = {
-  //NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: 'pk_live_Y2xlcmsuY2hlZmRodW5kby5jb20k',
-  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
-  CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,
+  NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
 };
 
-// Validate required environment variables
 export function validateEnv() {
-  const required = ['NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY'];
-  
-  for (const key of required) {
-    if (!process.env[key]) {
-      console.warn(`Missing required environment variable: ${key}`);
-    }
+  const required = [
+    "NEXT_PUBLIC_SUPABASE_URL",
+    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+  ] as const;
+  const missing = required.filter((key) => !env[key]);
+  if (missing.length > 0) {
+    throw new Error(`Missing required environment variables: ${missing.join(", ")}`);
   }
-}
-
-// Call validation in development
-if (process.env.NODE_ENV === 'development') {
-  validateEnv();
 }

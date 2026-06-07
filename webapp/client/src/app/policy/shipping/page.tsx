@@ -60,7 +60,7 @@ export default function ShippingPolicy() {
             <h2 className="text-2xl font-semibold text-slate-800 mt-8 mb-4">Contact us</h2>
             <p>For any questions or clarifications regarding this Shipping Policy or the nature of our services, please contact us at:</p>
             <div className="bg-white/40 p-4 rounded-lg border border-white/50 not-prose">
-              <p className="font-medium text-slate-900">Email: <a href="mailto:contact@ihmgurukul.com" className="text-blue-600 hover:underline">contact@ihmgurukul.com</a></p>
+              <p className="font-medium text-slate-900">Phone: +91 8826147981</p>
               <p className="font-medium text-slate-900">Address: New Delhi, India</p>
             </div>
           </div>

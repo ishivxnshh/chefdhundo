@@ -28,7 +28,7 @@ export function Chatbot() {
     const message = `*Bulk Staff Hiring Enquiry*
 
 *Name:* ${formData.name}
-*Email:* ${formData.email}
+
 *Phone:* ${formData.phone}
 *Subject:* ${formData.subject}
 *Message:* ${formData.message}`
@@ -81,22 +81,7 @@ export function Chatbot() {
                 required
               />
             </div>
-            
-            <div>
-              <Label htmlFor="email" className="text-sm font-medium text-gray-700">
-                Email *
-              </Label>
-              <Input
-                type="email"
-                id="email"
-                name="email"
-                value={formData.email}
-                onChange={handleInputChange}
-                placeholder="your@email.com"
-                className="mt-1"
-                required
-              />
-            </div>
+
             
             <div>
               <Label htmlFor="phone" className="text-sm font-medium text-gray-700">

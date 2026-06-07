@@ -1,28 +1,31 @@
 import { NextResponse } from "next/server";
 import {
-  canRequestOtp,
+  checkOtpRequestAllowed,
   createOtp,
+  getRequestIpHash,
+  invalidateOtp,
   normalizeIndianPhone,
   saveOtp,
+  updateOtpDelivery,
 } from "@/lib/auth/server";
 
-type TextBeeMessage = {
-  smsBatch?: string;
-  recipient?: string;
-  status?: string;
-  errorMessage?: string;
-  message?: string;
-};
-
-function wait(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function rateLimitMessage(reason: string | null) {
+  if (reason === "global_daily_limit") {
+    return "OTP service has reached its daily limit. Please try again later.";
+  }
+  if (reason === "phone_daily_limit") {
+    return "Too many OTP requests for this mobile number. Please try again tomorrow.";
+  }
+  return "Please wait before requesting another OTP.";
 }
 
 export async function POST(req: Request) {
+  let phone: string | null = null;
+  let otpId: string | null = null;
+
   try {
     const body = await req.json();
-    const phone = normalizeIndianPhone(body?.phone || "");
-
+    phone = normalizeIndianPhone(body?.phone || "");
     if (!phone) {
       return NextResponse.json(
         { success: false, error: "Enter a valid Indian mobile number" },
@@ -30,26 +33,26 @@ export async function POST(req: Request) {
       );
     }
 
-    const allowed = await canRequestOtp(phone);
-    if (!allowed) {
+    const ipHash = getRequestIpHash(req);
+    const limit = await checkOtpRequestAllowed(phone, ipHash);
+    if (!limit.allowed) {
       return NextResponse.json(
-        { success: false, error: "Please wait before requesting another OTP" },
+        { success: false, error: rateLimitMessage(limit.reason) },
         { status: 429 }
       );
     }
-
-    const otp = createOtp();
-    await saveOtp(phone, otp);
 
     const apiKey = process.env.TEXTBEE_API_KEY;
     const deviceId = process.env.TEXTBEE_DEVICE_ID;
     if (!apiKey || !deviceId) {
       return NextResponse.json(
-        { success: false, error: "TextBee is not configured on server" },
-        { status: 500 }
+        { success: false, error: "OTP service is not configured" },
+        { status: 503 }
       );
     }
 
+    const otp = createOtp();
+    otpId = await saveOtp(phone, otp, ipHash);
     const textBeeResponse = await fetch(
       `https://api.textbee.dev/api/v1/gateway/devices/${deviceId}/send-sms`,
       {
@@ -66,66 +69,35 @@ export async function POST(req: Request) {
     );
 
     if (!textBeeResponse.ok) {
-      const errorText = await textBeeResponse.text();
-      console.error("TextBee send failed:", errorText);
+      await invalidateOtp(otpId, phone);
       return NextResponse.json(
-        { success: false, error: "Could not send OTP SMS. Check TextBee setup." },
-        { status: 500 }
+        { success: false, error: "Could not send OTP SMS. Please try again." },
+        { status: 502 }
       );
     }
 
-    let smsBatchId: string | null = null;
-    try {
-      const body = await textBeeResponse.json();
-      smsBatchId = body?.data?.smsBatchId || null;
-    } catch {
-      smsBatchId = null;
-    }
+    const responseBody = await textBeeResponse.json().catch(() => ({}));
+    const providerMessageId =
+      responseBody?.data?.smsBatchId || responseBody?.smsBatchId || null;
+    await updateOtpDelivery(otpId, {
+      provider_message_id: providerMessageId,
+      provider_status: "accepted",
+      accepted_at: new Date().toISOString(),
+    });
 
-    // Verify short-term delivery state so we don't return false-positive success.
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      await wait(1200);
-        const messagesRes = await fetch(
-          `https://api.textbee.dev/api/v1/gateway/devices/${deviceId}/messages?page=1&limit=30`,
-          { headers: { "x-api-key": apiKey } }
-        );
-
-      if (!messagesRes.ok) continue;
-
-      const messagesPayload = await messagesRes.json();
-      const rows: TextBeeMessage[] = Array.isArray(messagesPayload?.data)
-        ? messagesPayload.data
-        : [];
-
-      const matched = rows.find((row) => {
-        const sameRecipient = row?.recipient === phone;
-        const sameBatch = smsBatchId ? row?.smsBatch === smsBatchId : false;
-        const hasOtp = String(row?.message || "").includes(otp);
-        return sameRecipient && (sameBatch || hasOtp);
-      });
-
-      if (!matched?.status) continue;
-
-      if (matched.status.toLowerCase() === "failed") {
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              matched.errorMessage ||
-              "OTP SMS failed on device. Check TextBee SMS permission.",
-          },
-          { status: 502 }
-        );
-      }
-
-      if (["sent", "dispatched", "delivered"].includes(matched.status.toLowerCase())) {
-        break;
-      }
-    }
-
-    return NextResponse.json({ success: true, message: "OTP sent" });
+    return NextResponse.json({
+      success: true,
+      message: "OTP request accepted",
+      requestId: otpId,
+    });
   } catch (error) {
-    console.error("request-otp error:", error);
+    if (phone && otpId) {
+      await invalidateOtp(otpId, phone).catch(() => undefined);
+    }
+    console.error(
+      "POST /api/auth/request-otp failed:",
+      error instanceof Error ? error.message : String(error)
+    );
     return NextResponse.json(
       { success: false, error: "Something went wrong" },
       { status: 500 }

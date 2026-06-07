@@ -5,19 +5,19 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { motion } from 'framer-motion'
-import { useAuth, SignInButton } from '@clerk/nextjs'
+import { useAuth, SignInButton } from '@/lib/auth/client'
 import { SubmitResume } from '@/components/submitResume'
 import { memo } from 'react'
 
 // Memoized motion card for better performance
-const MotionCard = memo(function MotionCard({ 
-  children, 
-  id, 
-  delay = 0 
-}: { 
+const MotionCard = memo(function MotionCard({
+  children,
+  id,
+  delay = 0
+}: {
   children: React.ReactNode
   id: string
-  delay?: number 
+  delay?: number
 }) {
   return (
     <motion.div
@@ -60,12 +60,12 @@ function FormsSection() {
               </Card>
             </MotionCard>
           )}
-          
+
           {/* Vertical Divider for desktop only */}
           <div className="hidden md:flex h-auto self-stretch items-center">
             <div className="w-px bg-gray-200 h-full mx-2" />
           </div>
-          
+
           {/* Find Chef Search Form */}
           <MotionCard id="hire-a-chef" delay={0.1}>
             <Card className="p-8 rounded-2xl shadow-xl border-0 bg-linear-to-br from-blue-50 to-white flex flex-col justify-between h-full">

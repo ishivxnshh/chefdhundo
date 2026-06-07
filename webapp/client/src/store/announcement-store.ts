@@ -65,11 +65,8 @@ export const useAnnouncementStore = create<AnnouncementState>((set) => ({
 
       const response = await fetch('/api/announcements?active=true');
       const result = await response.json();
-      
-      console.log('Fetched active announcements:', result);
 
       if (result.success && result.data) {
-        console.log('Active announcements data:', result.data);
         set({
           activeAnnouncements: result.data,
           isLoading: false,

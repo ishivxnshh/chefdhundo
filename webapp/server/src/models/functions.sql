@@ -46,10 +46,10 @@ ALTER TABLE resumes ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Enable all operations for service role on resumes" ON resumes
   FOR ALL USING (auth.role() = 'service_role');
 
--- Insert some sample data (optional - remove in production)
--- INSERT INTO users (clerk_user_id, name, email, role, chef) VALUES
--- ('clerk_sample_id_1', 'John Doe', 'john@example.com', 'basic', 'no'),
--- ('clerk_sample_id_2', 'Chef Alice', 'alice@example.com', 'pro', 'yes');
+-- Insert sample mobile users only in local/dev if needed.
+-- INSERT INTO users (clerk_user_id, name, role, chef) VALUES
+-- ('phone:+919999999999', '+919999999999', 'basic', 'no'),
+-- ('phone:+919360804740', '+919360804740', 'admin', 'no');
 
 
 

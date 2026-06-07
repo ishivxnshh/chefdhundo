@@ -38,6 +38,10 @@ import AnnouncementManagement from '@/components/AnnouncementManagement'
 import type { User } from '@/types/supabase'
 import type { Resume } from '@/types/supabase'
 
+function userMobile(user: User) {
+  return user.clerk_user_id?.startsWith('phone:') ? user.clerk_user_id.replace('phone:', '') : ''
+}
+
 export default function AdminDashboardClient() {
   const router = useRouter()
   const users = useSupabaseUsers()
@@ -96,8 +100,8 @@ export default function AdminDashboardClient() {
   const filteredUsers = useMemo(() => {
     return users.filter(u => {
       const matchesSearch = !userSearch 
-        || u.name?.toLowerCase().includes(userSearch.toLowerCase()) 
-        || u.email?.toLowerCase().includes(userSearch.toLowerCase())
+        || u.name?.toLowerCase().includes(userSearch.toLowerCase())
+        || userMobile(u).toLowerCase().includes(userSearch.toLowerCase())
       const matchesRole =
         userRoleFilter === 'all'
           ? true
@@ -137,7 +141,6 @@ export default function AdminDashboardClient() {
         || r.name?.toLowerCase().includes(resumeSearch.toLowerCase())
         || r.city?.toLowerCase().includes(resumeSearch.toLowerCase())
         || r.user_location?.toLowerCase().includes(resumeSearch.toLowerCase())
-        || r.email?.toLowerCase().includes(resumeSearch.toLowerCase())
       const roleLike = r.profession || r.work_type || r.job_role || ''
       const matchesProfession = professionFilter === 'all' || roleLike === professionFilter
       return matchesSearch && matchesProfession
@@ -215,8 +218,8 @@ export default function AdminDashboardClient() {
 
   // CSV export helpers
   const exportUsersCsv = () => {
-    const header = ['name','email','role','chef','created_at']
-    const rows = users.map(u => [u.name, u.email, u.role, u.chef, u.created_at])
+    const header = ['name','mobile','role','chef','created_at']
+    const rows = users.map(u => [u.name, userMobile(u), u.role, u.chef, u.created_at])
     const csv = [header, ...rows].map(r => r.map(v => `"${(v ?? '').toString().replace(/"/g,'""')}"`).join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -228,8 +231,8 @@ export default function AdminDashboardClient() {
   }
 
   const exportResumesCsv = () => {
-    const header = ['name','email','phone','city','profession','experience_years']
-    const rows = resumes.map(r => [r.name, r.email, r.phone, (r.city || r.user_location), (r.profession || r.work_type || r.job_role), r.experience_years])
+    const header = ['name','phone','city','profession','experience_years']
+    const rows = resumes.map(r => [r.name, r.phone, (r.city || r.user_location), (r.profession || r.work_type || r.job_role), r.experience_years])
     const csv = [header, ...rows].map(r => r.map(v => `"${(v ?? '').toString().replace(/"/g,'""')}"`).join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -381,7 +384,7 @@ export default function AdminDashboardClient() {
                     </>
                   ) : (
                     <>
-                      <div className="text-sm text-gray-700">New users (last 5): {users.slice(0,5).map(u => u.name || u.email).join(', ') || '—'}</div>
+                      <div className="text-sm text-gray-700">New users (last 5): {users.slice(0,5).map(u => u.name || userMobile(u)).join(', ') || '—'}</div>
                       <div className="text-sm text-gray-700">New resumes (last 5): {resumes.slice(0,5).map(r => r.name).join(', ') || '—'}</div>
                     </>
                   )}
@@ -400,7 +403,7 @@ export default function AdminDashboardClient() {
                 <CardDescription>Search, filter and manage users</CardDescription>
                 <div className="flex flex-col sm:flex-row gap-3">
                   <Input 
-                    placeholder="Search by name or email..." 
+                    placeholder="Search by name or mobile..."
                     value={userSearch} 
                     onChange={(e) => setUserSearch(e.target.value)} 
                   />
@@ -425,7 +428,7 @@ export default function AdminDashboardClient() {
                     <thead className="text-left text-gray-600">
                       <tr className="sticky top-0 bg-white/80 backdrop-blur z-10">
                         <th className="py-2 pr-4 sticky left-0 bg-white/80 backdrop-blur">Name</th>
-                        <th className="py-2 pr-4">Email</th>
+
                         <th className="py-2 pr-4">Role</th>
                         <th className="py-2 pr-4">Chef Status</th>
                       </tr>
@@ -456,12 +459,12 @@ export default function AdminDashboardClient() {
                             <div className="flex items-center gap-3">
                               <Avatar className="h-8 w-8">
                                 <AvatarImage src={u.photo || ''} alt={u.name || 'User'} loading="lazy" />
-                                <AvatarFallback>{(u.name || u.email || '?').charAt(0).toUpperCase()}</AvatarFallback>
+                                <AvatarFallback>{(u.name || userMobile(u) || '?').charAt(0).toUpperCase()}</AvatarFallback>
                               </Avatar>
                               <span className="font-medium text-gray-900">{u.name || '—'}</span>
                             </div>
                           </td>
-                          <td className="py-3 pr-4">{u.email || '—'}</td>
+
                           <td className="py-3 pr-4">
                             {u.role === 'admin' ? (
                               <Badge className="bg-black text-white border border-black">Admin</Badge>
@@ -518,7 +521,7 @@ export default function AdminDashboardClient() {
                 <CardDescription>Browse and export chef resumes</CardDescription>
                 <div className="flex flex-col sm:flex-row gap-3">
                   <Input 
-                    placeholder="Search by name, city, or email..." 
+                    placeholder="Search by name, city, or phone..."
                     value={resumeSearch} 
                     onChange={(e) => setResumeSearch(e.target.value)} 
                   />
@@ -546,7 +549,7 @@ export default function AdminDashboardClient() {
                     <thead className="text-left text-gray-600">
                       <tr className="sticky top-0 bg-white/80 backdrop-blur z-10">
                         <th className="py-2 pr-4 sticky left-0 bg-white/80 backdrop-blur">Name</th>
-                        <th className="py-2 pr-4">Email</th>
+
                         <th className="py-2 pr-4">Phone</th>
                         <th className="py-2 pr-4">Location</th>
                         <th className="py-2 pr-4">Profession</th>
@@ -602,7 +605,7 @@ export default function AdminDashboardClient() {
                               <span className="font-medium text-gray-900">{r.name || '—'}</span>
                             </div>
                           </td>
-                          <td className="py-3 pr-4">{r.email || '—'}</td>
+
                           <td className="py-3 pr-4">{r.phone || '—'}</td>
                           <td className="py-3 pr-4">{r.city || r.user_location || '—'}</td>
                           <td className="py-3 pr-4">{r.profession || r.work_type || r.job_role || '—'}</td>
@@ -694,11 +697,11 @@ export default function AdminDashboardClient() {
                         <div className="flex items-center gap-3">
                           <Avatar className="h-10 w-10">
                             <AvatarImage src={u.photo || ''} alt={u.name || 'User'} loading="lazy" />
-                            <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-500 text-white font-semibold">{(u.name || u.email || '?').charAt(0).toUpperCase()}</AvatarFallback>
+                            <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-500 text-white font-semibold">{(u.name || userMobile(u) || '?').charAt(0).toUpperCase()}</AvatarFallback>
                           </Avatar>
                           <div>
                             <div className="font-medium text-gray-900">{u.name || 'Unknown'}</div>
-                            <div className="text-sm text-gray-500">{u.email}</div>
+                            <div className="text-sm text-gray-500">{userMobile(u)}</div>
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
@@ -760,7 +763,7 @@ export default function AdminDashboardClient() {
                             </Avatar>
                             <div>
                               <div className="font-semibold text-gray-900">{r.name}</div>
-                              <div className="text-xs text-gray-500">{r.email}</div>
+
                             </div>
                           </div>
                           <span className="text-xs text-gray-400 whitespace-nowrap">

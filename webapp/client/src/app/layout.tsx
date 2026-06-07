@@ -8,8 +8,8 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
 import { Toaster } from "@/components/ui/sonner";
-import { ClerkProvider } from "@clerk/nextjs";
-import { currentUser } from "@clerk/nextjs/server";
+import { currentUser } from "@/lib/auth/server";
+import { MobileAuthProvider } from "@/lib/auth/client";
 import AnnouncementProvider from "@/components/AnnouncementProvider";
 import { AuthProvider } from "@/components/AuthProvider";
 import { getOrCreateServerUser } from "@/lib/supabase/server";
@@ -66,44 +66,54 @@ export default async function RootLayout({
 }>) {
   const enableVercelAnalytics = process.env.NEXT_PUBLIC_ENABLE_VERCEL_ANALYTICS === "true";
 
-  // Hardcoded Clerk publishable key for build
-  //const publishableKey = 'pk_live_Y2xlcmsuY2hlZmRodW5kby5jb20k';
-  const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-
-  let clerkUser = null;
+  let authUser = null;
 
   try {
-    clerkUser = await currentUser();
+    authUser = await currentUser();
   } catch {
-    clerkUser = null;
+    authUser = null;
   }
 
   let supabaseUser = null;
 
-  if (clerkUser) {
+  if (authUser) {
     // Get or create user in Supabase (happens server-side, no loading state!)
-    supabaseUser = await getOrCreateServerUser(clerkUser);
+    supabaseUser = await getOrCreateServerUser(authUser);
   }
 
-  return (
-    <ClerkProvider publishableKey={publishableKey}>
-      <html lang="en">
-        <head>
-          <Script
-            async
-            src="https://www.googletagmanager.com/gtag/js?id=G-K9WJC4QQ37"
-          />
+  const initialAuthUser = authUser
+    ? {
+        id: authUser.id,
+        firstName: authUser.firstName,
+        lastName: authUser.lastName,
+        fullName: authUser.fullName,
+        imageUrl: authUser.imageUrl,
+        primaryPhoneNumber: authUser.primaryPhoneNumber,
+        primaryPhoneNumberId: authUser.primaryPhoneNumberId,
+        unsafeMetadata: authUser.unsafeMetadata,
+        publicMetadata: authUser.publicMetadata,
+      }
+    : null;
 
-          <Script id="google-analytics">
-            {`
+  return (
+    <html lang="en">
+      <head>
+        <Script
+          async
+          src="https://www.googletagmanager.com/gtag/js?id=G-K9WJC4QQ37"
+        />
+
+        <Script id="google-analytics">
+          {`
             window.dataLayer = window.dataLayer || [];
             function gtag(){dataLayer.push(arguments);}
             gtag('js', new Date());
             gtag('config', 'G-K9WJC4QQ37');
           `}
-          </Script>
-        </head>
-        <body className={inter.className}>
+        </Script>
+      </head>
+      <body className={inter.className}>
+        <MobileAuthProvider initialUser={initialAuthUser}>
           <NextTopLoader
             color="#f97316"
             initialPosition={0.08}
@@ -142,8 +152,8 @@ export default async function RootLayout({
               }}
             />
           </AuthProvider>
-        </body>
-      </html>
-    </ClerkProvider>
+        </MobileAuthProvider>
+      </body>
+    </html>
   );
 }

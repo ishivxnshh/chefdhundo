@@ -14,16 +14,13 @@ interface AnnouncementBannerProps {
 
 export function AnnouncementBanner({ announcement, onDismiss, isPreview = false }: AnnouncementBannerProps) {
   const [isVisible, setIsVisible] = useState(true);
-  
+
   // Check if dismissed in sessionStorage (per tab/session)
   useEffect(() => {
     if (announcement.dismissible && !isPreview) {
       const dismissed = sessionStorage.getItem(`announcement-dismissed-${announcement.id}`);
       if (dismissed) {
-        console.log(`Announcement ${announcement.id} was previously dismissed. Clear sessionStorage to see it again.`);
         setIsVisible(false);
-      } else {
-        console.log(`Showing announcement: ${announcement.title} (ID: ${announcement.id})`);
       }
     }
   }, [announcement.id, announcement.dismissible, isPreview, announcement.title]);
@@ -44,10 +41,10 @@ export function AnnouncementBanner({ announcement, onDismiss, isPreview = false 
   if (!isVisible) return null;
 
   const typeStyle = announcementTypeStyles[announcement.type];
-  
+
   // Get the icon component dynamically
-  const IconComponent = announcement.icon 
-    ? (LucideIcons[announcement.icon as keyof typeof LucideIcons] as React.ComponentType<{ className?: string }>) 
+  const IconComponent = announcement.icon
+    ? (LucideIcons[announcement.icon as keyof typeof LucideIcons] as React.ComponentType<{ className?: string }>)
     : (LucideIcons[typeStyle.defaultIcon as keyof typeof LucideIcons] as React.ComponentType<{ className?: string }>);
 
   // Simple markdown-like rendering for bold and links
@@ -55,7 +52,7 @@ export function AnnouncementBanner({ announcement, onDismiss, isPreview = false 
     // Support **bold**
     const boldRegex = /\*\*(.*?)\*\*/g;
     const parts = text.split(boldRegex);
-    
+
     return parts.map((part, index) => {
       // Odd indices are the content inside **
       if (index % 2 === 1) {
@@ -68,7 +65,7 @@ export function AnnouncementBanner({ announcement, onDismiss, isPreview = false 
   // For preview mode, show inline card
   if (isPreview) {
     return (
-      <div 
+      <div
         className={cn(
           "rounded-2xl shadow-2xl border-2 transition-all duration-300 max-w-md w-full p-6",
           announcement.bg_color || typeStyle.defaultBgColor || 'bg-white',
@@ -78,7 +75,7 @@ export function AnnouncementBanner({ announcement, onDismiss, isPreview = false 
         {/* Glossy texture overlay */}
         <div className="absolute inset-0 bg-gradient-to-br from-white/40 via-transparent to-transparent opacity-50 pointer-events-none" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-white/30 via-transparent to-transparent opacity-30 pointer-events-none" />
-        
+
         <div className="relative z-10">
           <div className="flex items-start justify-between gap-4 mb-4">
             <div className="flex items-center gap-2">
@@ -101,14 +98,14 @@ export function AnnouncementBanner({ announcement, onDismiss, isPreview = false 
               </button>
             )}
           </div>
-          
+
           <h3 className={cn(
             "text-lg font-bold mb-2",
             announcement.text_color || typeStyle.defaultTextColor
           )}>
             {announcement.title}
           </h3>
-          
+
           <p className={cn(
             "text-sm mb-4",
             announcement.text_color || typeStyle.defaultTextColor,
@@ -116,9 +113,9 @@ export function AnnouncementBanner({ announcement, onDismiss, isPreview = false 
           )}>
             {renderMessage(announcement.message)}
           </p>
-          
+
           {announcement.link_url && (
-            <a 
+            <a
               href={announcement.link_url}
               className={cn(
                 "inline-flex items-center gap-2 text-sm font-semibold hover:underline",
@@ -135,13 +132,13 @@ export function AnnouncementBanner({ announcement, onDismiss, isPreview = false 
   }
 
   return (
-    <div 
+    <div
       className={cn(
         "fixed bottom-6 left-1/2 -translate-x-1/2 z-50 transition-all duration-500 ease-out",
         isVisible ? "translate-y-0 opacity-100" : "translate-y-[200%] opacity-0"
       )}
     >
-      <div 
+      <div
         className={cn(
           "rounded-2xl shadow-2xl border-2 transition-all duration-300 max-w-md w-[90vw] sm:w-[400px] p-6",
           announcement.bg_color || typeStyle.defaultBgColor || 'bg-white',
@@ -151,7 +148,7 @@ export function AnnouncementBanner({ announcement, onDismiss, isPreview = false 
         {/* Glossy texture overlay */}
         <div className="absolute inset-0 bg-gradient-to-br from-white/40 via-transparent to-transparent opacity-50 pointer-events-none" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-white/30 via-transparent to-transparent opacity-30 pointer-events-none" />
-        
+
         <div className="relative z-10">
           <div className="flex items-start justify-between gap-4 mb-4">
             <div className="flex items-center gap-2">
@@ -178,14 +175,14 @@ export function AnnouncementBanner({ announcement, onDismiss, isPreview = false 
               </button>
             )}
           </div>
-          
+
           <h3 className={cn(
             "text-lg font-bold mb-2",
             announcement.text_color || typeStyle.defaultTextColor
           )}>
             {announcement.title}
           </h3>
-          
+
           <p className={cn(
             "text-sm mb-4",
             announcement.text_color || typeStyle.defaultTextColor,
@@ -193,9 +190,9 @@ export function AnnouncementBanner({ announcement, onDismiss, isPreview = false 
           )}>
             {renderMessage(announcement.message)}
           </p>
-          
+
           {announcement.link_url && (
-            <a 
+            <a
               href={announcement.link_url}
               target="_blank"
               rel="noopener noreferrer"
@@ -222,23 +219,20 @@ interface AnnouncementContainerProps {
 export function AnnouncementContainer({ announcements }: AnnouncementContainerProps) {
   const [visibleAnnouncements, setVisibleAnnouncements] = useState<AnnouncementType[]>([]);
 
-  console.log('AnnouncementContainer received:', announcements);
-
   useEffect(() => {
-    console.log('Processing announcements, count:', announcements.length);
     // Filter announcements based on date and status
     const now = new Date();
     const active = announcements.filter(ann => {
       if (ann.status !== 'active') return false;
-      
+
       const startDate = new Date(ann.start_date);
       if (startDate > now) return false;
-      
+
       if (ann.end_date) {
         const endDate = new Date(ann.end_date);
         if (endDate < now) return false;
       }
-      
+
       return true;
     }).sort((a, b) => b.priority - a.priority); // Sort by priority (highest first)
 

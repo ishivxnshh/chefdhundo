@@ -1,4 +1,6 @@
-//Supabase client configuration
+import "server-only"
+
+// Supabase admin configuration
 import { createClient } from '@supabase/supabase-js'
 import { Database } from '../../types/supabase'
 

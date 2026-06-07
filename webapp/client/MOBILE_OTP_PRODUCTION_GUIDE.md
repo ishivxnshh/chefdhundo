@@ -6,7 +6,7 @@ This guide explains how to run ChefDhundo mobile OTP login in local/dev and prod
 
 ## 1. What this implementation does
 
-- Replaces Clerk login with mobile OTP login.
+- Replaces the legacy third-party login flow with mobile OTP login.
 - Sends OTP using TextBee (Android phone as SMS gateway).
 - Verifies OTP in backend and creates secure `chef_auth` cookie.
 - Protects `/dashboard` and `/admin` using middleware.

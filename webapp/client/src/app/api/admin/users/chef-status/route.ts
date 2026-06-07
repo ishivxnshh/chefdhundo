@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
-import { getUserByClerkId, updateUserById } from '@/lib/supabase/database'
+import { auth } from '@/lib/auth/server'
+import { getUserByIdentityId, updateUserById } from '@/lib/supabase/database'
 
 /**
  * PATCH /api/admin/users/chef-status
@@ -9,10 +9,10 @@ import { getUserByClerkId, updateUserById } from '@/lib/supabase/database'
  */
 export async function PATCH(request: NextRequest) {
   try {
-    // Get current user from Clerk
-    const { userId: clerkUserId } = await auth()
-    
-    if (!clerkUserId) {
+    // Get current user from the mobile session
+    const { userId: identityId } = await auth()
+
+    if (!identityId) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
@@ -20,8 +20,8 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Verify admin role
-    const currentUserResult = await getUserByClerkId(clerkUserId)
-    
+    const currentUserResult = await getUserByIdentityId(identityId)
+
     if (!currentUserResult.success || !currentUserResult.data) {
       return NextResponse.json(
         { success: false, error: 'User not found' },

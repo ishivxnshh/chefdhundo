@@ -32,15 +32,21 @@
    Click "Environment Variables" and add all variables from your `.env.local`:
    
    **IMPORTANT**: For production, update these values:
-   - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` - Use production key (pk_live_...)
-   - `CLERK_SECRET_KEY` - Use production key (sk_live_...)
+   - `TEXTBEE_API_KEY` - Use a rotated production TextBee API key
+   - `TEXTBEE_DEVICE_ID` - Use the production Android gateway device ID
+   - `OTP_SECRET` - Use a long random production secret
+   - `AUTH_SECRET` - Use a long random production secret
+   - `WHATSAPP_INGEST_SECRET` - Use a long random shared secret for trusted WhatsApp/server ingestion
+   - `SUPABASE_PROJECT_URL` - Use the production Supabase project URL
+   - `SUPABASE_PUBLIC_ANON_KEY` - Use the production publishable/anon key
+   - `SUPABASE_SERVICE_ROLE` - Use the production service-role key server-side only
    - `CASHFREE_CLIENT_ID` - Use production ID
    - `CASHFREE_CLIENT_SECRET` - Use production secret
    - `CASHFREE_ENV` - Set to `production`
    - `NEXT_PUBLIC_CASHFREE_ENV` - Set to `production`
-   - `NEXT_PUBLIC_APP_URL` - Set to your Vercel URL (e.g., https://your-app.vercel.app)
-   - `RAZORPAY_KEY_ID` - Use live key (rzp_live_...)
-   - `RAZORPAY_KEY_SECRET` - Use live secret
+   - `NEXT_PUBLIC_APP_URL` - Set to your Vercel URL (for example, https://your-app.vercel.app)
+   - `NEXT_PUBLIC_RAZORPAY_KEY_ID` - Use live public Razorpay key
+   - `RAZORPAY_KEY_SECRET` - Use live secret server-side only
 
 6. Click "Deploy"
 
@@ -70,11 +76,11 @@
 
 ## Step 3: Configure Production Environment
 
-### Update Clerk Settings
-1. Go to https://dashboard.clerk.com
-2. Switch to production mode or use your production instance
-3. Update Authorized Redirect URLs with your Vercel deployment URL
-4. Update CORS settings if needed
+### Update Mobile OTP Settings
+1. Rotate every secret that has ever been shared in chat or local screenshots.
+2. Confirm the TextBee Android gateway phone is online, has SMS permission, and battery optimization is disabled.
+3. Confirm `NEXT_PUBLIC_APP_URL` matches the production HTTPS domain.
+4. Confirm `AUTH_SECRET`, `OTP_SECRET`, and `WHATSAPP_INGEST_SECRET` exist only in server-side deployment secrets.
 
 ### Update Cashfree Settings
 1. Log in to Cashfree dashboard
@@ -87,13 +93,14 @@
 3. Add your Vercel domain to authorized domains
 
 ### Update Supabase Settings
-1. Go to your Supabase project settings
-2. Add your Vercel URL to allowed domains in Authentication settings
+1. Apply the checked-in SQL migrations before production traffic.
+2. Confirm RLS is enabled on public tables exposed through Supabase Data API.
+3. Confirm service-role keys are only used server-side.
 
 ## Step 4: Post-Deployment
 
 1. Test all functionalities:
-   - User authentication (Clerk)
+   - Mobile OTP authentication and dashboard session persistence
    - Payment processing (Cashfree/RazorPay)
    - Database operations (Supabase)
    - Resume uploads and downloads
@@ -137,7 +144,7 @@ Complete the deployment steps above to get your Vercel project URL (e.g., `your-
 
 ### Step 2: Add Domain in Vercel
 1. Go to your Vercel project dashboard
-2. Click **Settings** → **Domains**
+2. Click **Settings** â†’ **Domains**
 3. Enter your GoDaddy domain:
    - `chefdhundo.com` (root domain)
    - `www.chefdhundo.com` (www subdomain)
@@ -147,7 +154,7 @@ Complete the deployment steps above to get your Vercel project URL (e.g., `your-
 Vercel will provide DNS records. Now configure them in GoDaddy:
 
 #### For Root Domain (chefdhundo.com):
-1. Log in to GoDaddy → **My Products** → **DNS**
+1. Log in to GoDaddy â†’ **My Products** â†’ **DNS**
 2. Find your domain and click **Manage DNS**
 3. Add/Update these records:
 
@@ -174,7 +181,7 @@ TTL: 600 seconds
 ### Step 4: Wait for DNS Propagation
 - DNS changes take 5 minutes to 48 hours to propagate
 - Usually propagates within 1-2 hours
-- Check status in Vercel dashboard (Settings → Domains)
+- Check status in Vercel dashboard (Settings â†’ Domains)
 - Use https://dnschecker.org to verify propagation
 
 ### Step 5: Update Environment Variables
@@ -185,25 +192,18 @@ NEXT_PUBLIC_APP_URL=https://chefdhundo.com
 
 ### Step 6: Update Service Configurations
 
-#### Update Clerk
-1. Go to Clerk dashboard → Configure → Paths
-2. Add authorized domains:
-   - `chefdhundo.com`
-   - `www.chefdhundo.com`
-3. Update redirect URLs
-
-#### Update Cashfree
-1. Go to Cashfree dashboard
-2. Add `chefdhundo.com` to allowed domains
-3. Update webhook URLs if needed
+#### Update Mobile OTP
+1. Confirm TextBee delivery from the production gateway phone.
+2. Confirm OTP login, refresh persistence, and logout on the production domain.
+3. Confirm rotated secrets are active and old sessions were invalidated.
 
 #### Update RazorPay
-1. Go to RazorPay dashboard → Settings
+1. Go to RazorPay dashboard â†’ Settings
 2. Add `chefdhundo.com` to authorized domains
 3. Update webhook endpoints
 
 #### Update Supabase
-1. Go to Supabase dashboard → Authentication → URL Configuration
+1. Go to Supabase dashboard â†’ Authentication â†’ URL Configuration
 2. Add site URL: `https://chefdhundo.com`
 3. Add redirect URLs:
    - `https://chefdhundo.com/**`
@@ -224,7 +224,7 @@ NEXT_PUBLIC_APP_URL=https://chefdhundo.com
 
 **Redirect issues:**
 - In Vercel, configure www to redirect to root or vice versa
-- Settings → Domains → Click domain → Redirect
+- Settings â†’ Domains â†’ Click domain â†’ Redirect
 
 ## Alternative Hosting Options
 

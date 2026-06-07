@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { updateResume, deleteResume } from '@/lib/supabase/database'
+import { auth } from '@/lib/auth/server'
+import { updateResume, deleteResume, getUserByIdentityId } from '@/lib/supabase/database'
+import { createSupabaseAdminClient } from '@/lib/supabase/supabase'
 import { ResumeUpdate } from '@/types/supabase'
 
 type ResumeRouteParams = {
@@ -8,6 +10,24 @@ type ResumeRouteParams = {
 
 type ResumeRouteContext = {
   params: Promise<ResumeRouteParams>
+}
+
+async function canMutateResume(resumeId: string) {
+  const { userId } = await auth()
+  if (!userId) return false
+
+  const user = await getUserByIdentityId(userId)
+  if (!user.success || !user.data) return false
+  if (user.data.role === 'admin') return true
+
+  const supabase = createSupabaseAdminClient()
+  const { data: resume } = await supabase
+    .from('resumes')
+    .select('user_id')
+    .eq('id', resumeId)
+    .maybeSingle()
+
+  return resume?.user_id === user.data.id
 }
 
 // PUT /api/resumes/[id] - Update resume
@@ -28,16 +48,23 @@ export async function PUT(
       )
     }
 
+    if (!(await canMutateResume(resumeId))) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden' },
+        { status: 403 }
+      )
+    }
+
     // Create update object with only provided fields
     const updates: ResumeUpdate = {}
-    
+
     // Map all possible fields that can be updated
     const updatableFields = [
-      'name', 'email', 'phone', 'user_location', 'age_range', 'gender', 
+      'name', 'phone', 'user_location', 'age_range', 'gender',
       'city', 'user_state', 'pin_code', 'experience_years', 'experiences',
       'profession', 'job_role', 'education', 'cuisines', 'languages',
       'certifications', 'current_ctc', 'expected_ctc', 'notice_period',
-      'training', 'preferred_location', 'joining', 'work_type', 
+      'training', 'preferred_location', 'joining', 'work_type',
       'business_type', 'linkedin_profile', 'portfolio_website', 'bio',
       'passport', 'photo', 'resume_file', 'verified'
     ]
@@ -49,7 +76,7 @@ export async function PUT(
     })
 
     const result = await updateResume(resumeId, updates)
-    
+
     if (!result.success) {
       return NextResponse.json(
         { success: false, error: result.error },
@@ -88,8 +115,15 @@ export async function DELETE(
       )
     }
 
+    if (!(await canMutateResume(resumeId))) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden' },
+        { status: 403 }
+      )
+    }
+
     const result = await deleteResume(resumeId)
-    
+
     if (!result.success) {
       return NextResponse.json(
         { success: false, error: result.error },

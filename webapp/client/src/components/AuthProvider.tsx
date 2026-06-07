@@ -1,7 +1,7 @@
 'use client'
 
 import React, { createContext, useContext, useEffect, useRef } from 'react'
-import { useAuth, useUser } from '@clerk/nextjs'
+import { useUser } from '@/lib/auth/client'
 import { useSupabaseUserStore } from '@/store/supabase-store/user-db-store'
 import type { User } from '@/types/supabase'
 
@@ -25,32 +25,29 @@ interface AuthProviderProps {
 }
 
 /**
- * AuthProvider - Hydrates Zustand store with server-fetched user data
- * 
- * This eliminates the client-side loading delay by:
- * 1. Receiving pre-fetched user data from the server layout
- * 2. Immediately hydrating the Zustand store on mount
- * 3. Falling back to client-side fetch if server data is missing
+ * AuthProvider - Hydrates the Supabase user store with server-fetched user data.
+ *
+ * Mobile authentication state is owned by MobileAuthProvider. This wrapper
+ * keeps the existing Supabase profile store in sync during the migration.
  */
 export function AuthProvider({ children, initialUser }: AuthProviderProps) {
   const hydrated = useRef(false)
   const fallbackAttempted = useRef(false)
   const store = useSupabaseUserStore()
-  const { isSignedIn, isLoaded: clerkLoaded } = useAuth()
-  const { user: clerkUser } = useUser()
-  
+  const { isSignedIn, isLoaded: authLoaded, user: authUser } = useUser()
+
   // Hydrate the store with server data on mount - only once
   useEffect(() => {
     if (!hydrated.current) {
       hydrated.current = true
-      
+
       if (initialUser) {
         // Server provided user data - use it immediately
         store.setCurrentUser(initialUser)
         store.setLoading(false)
-        useSupabaseUserStore.setState({ 
+        useSupabaseUserStore.setState({
           isUserLoaded: true,
-          lastFetchedClerkId: initialUser.clerk_user_id 
+          lastFetchedIdentityId: initialUser.clerk_user_id
         })
       } else {
         // No server data - mark as needing fallback fetch
@@ -59,35 +56,34 @@ export function AuthProvider({ children, initialUser }: AuthProviderProps) {
       }
     }
   }, [initialUser, store])
-  
+
   // Fallback: If signed in but no user data, fetch client-side
   useEffect(() => {
     const currentUser = store.currentUser
     const isUserLoaded = useSupabaseUserStore.getState().isUserLoaded
-    
+
     if (
-      clerkLoaded && 
-      isSignedIn && 
-      clerkUser?.id && 
-      !currentUser && 
+      authLoaded &&
+      isSignedIn &&
+      authUser?.id &&
+      !currentUser &&
       !isUserLoaded &&
       !fallbackAttempted.current
     ) {
       fallbackAttempted.current = true
-      console.log('AuthProvider: Server did not provide user, fetching client-side...')
-      
+
       // Use the store's existing method to fetch/create user
-      store.findAndSetCurrentUserByClerkId(clerkUser.id).then((foundUser) => {
+      store.findAndSetCurrentUserByIdentityId(authUser.id).then((foundUser) => {
         const latestError = useSupabaseUserStore.getState().error
-        if (!foundUser && clerkUser && !latestError) {
-          store.createUserFromClerkData(clerkUser)
+        if (!foundUser && authUser && !latestError) {
+          store.createUserFromMobileAuthData(authUser)
         }
       })
     }
-  }, [clerkLoaded, isSignedIn, clerkUser, store])
-  
+  }, [authLoaded, isSignedIn, authUser, store])
+
   return (
-    <AuthContext.Provider value={{ user: initialUser, isLoaded: true }}>
+    <AuthContext.Provider value={{ user: store.currentUser ?? initialUser, isLoaded: authLoaded }}>
       {children}
     </AuthContext.Provider>
   )

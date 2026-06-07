@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
+import { auth } from '@/lib/auth/server'
 import { createSupabaseAdminClient } from '@/lib/supabase/supabase'
 
 export async function POST(request: Request) {
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
 
     if (resumeRow.resume_file) {
       // Try to infer the storage key from the signed URL. Fallback to conventional path.
-      const match = resumeRow.resume_file.match(/\/resumes\/(.*?)\?/) 
+      const match = resumeRow.resume_file.match(/\/resumes\/(.*?)\?/)
       const key = match?.[1] || `${userRow.id}/${resumeId}.pdf`
       const { error: delErr } = await supabase.storage.from('resumes').remove([key])
       if (delErr) {

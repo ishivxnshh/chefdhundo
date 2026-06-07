@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { CheckCircle, ArrowLeft, Loader2, Sparkles } from 'lucide-react';
 import Link from 'next/link';
-import { useUser } from '@clerk/nextjs';
+import { useUser } from '@/lib/auth/client';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 
@@ -13,7 +13,7 @@ export default function PaymentSuccessContent() {
   const router = useRouter();
   const { user } = useUser();
   const orderId = searchParams.get('order_id');
-  
+
   const [transactionId, setTransactionId] = useState<string | null>(null);
   const [planName, setPlanName] = useState<string>('Pro Subscription');
   const [isUnlocking, setIsUnlocking] = useState(false);
@@ -50,22 +50,22 @@ export default function PaymentSuccessContent() {
 
     try {
       // Refresh user data from Supabase to get updated role
-      const response = await fetch(`/api/user-supabase?clerk_id=${user.id}`);
+      const response = await fetch(`/api/user-supabase?identity_id=${encodeURIComponent(user.id)}`);
       const result = await response.json();
 
       if (result.success && result.data?.role === 'pro') {
-        // Reload Clerk user session to sync the role
+        // Reload mobile auth profile to sync the role
         await user.reload();
-        
+
         toast.success('🎉 Pro features unlocked! Redirecting...', { id: 'unlock-pro' });
-        
+
         // Wait a moment for user to see the success message
         setTimeout(() => {
           router.push('/findchefs');
         }, 1500);
       } else {
         toast.warning('Please wait a moment for your account to update', { id: 'unlock-pro' });
-        
+
         // Retry after a short delay
         setTimeout(() => {
           router.push('/findchefs');
@@ -74,7 +74,7 @@ export default function PaymentSuccessContent() {
     } catch (error) {
       console.error('Error unlocking pro:', error);
       toast.error('Failed to unlock. Redirecting anyway...', { id: 'unlock-pro' });
-      
+
       setTimeout(() => {
         router.push('/findchefs');
       }, 1500);
@@ -99,21 +99,21 @@ export default function PaymentSuccessContent() {
         {/* Order Details */}
         <div className="bg-gray-50 rounded-lg p-4 mb-4 text-left">
           <h3 className="font-semibold text-gray-800 mb-3">Order Details</h3>
-          
+
           {orderId && (
             <div className="mb-2">
               <p className="text-xs text-gray-500">Order ID</p>
               <p className="font-mono text-sm text-gray-800 break-all">{orderId}</p>
             </div>
           )}
-          
+
           {transactionId && (
             <div className="mb-2">
               <p className="text-xs text-gray-500">Transaction ID</p>
               <p className="font-mono text-sm text-gray-800 break-all">{transactionId}</p>
             </div>
           )}
-          
+
           <div>
             <p className="text-xs text-gray-500">Plan</p>
             <p className="text-sm font-semibold text-orange-600">{planName}</p>
@@ -151,14 +151,14 @@ export default function PaymentSuccessContent() {
           </Button>
 
           <div className="flex flex-col sm:flex-row gap-3">
-            <Link 
+            <Link
               href="/findchefs"
               className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-800 px-6 py-3 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2"
             >
               <ArrowLeft className="w-4 h-4" />
               Find Chefs
             </Link>
-            <Link 
+            <Link
               href="/"
               className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-800 px-6 py-3 rounded-lg font-semibold transition-colors"
             >

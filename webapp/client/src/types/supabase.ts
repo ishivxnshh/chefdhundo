@@ -209,7 +209,7 @@ export interface Database {
           id: string
           clerk_user_id: string
           name: string
-          email: string
+          email: string | null
           role: 'basic' | 'pro' | 'admin'
           chef: 'yes' | 'no'
           photo: string | null
@@ -220,7 +220,7 @@ export interface Database {
           id?: string
           clerk_user_id: string
           name: string
-          email: string
+          email?: string | null
           role?: 'basic' | 'pro' | 'admin'
           chef?: 'yes' | 'no'
           photo?: string | null
@@ -231,7 +231,7 @@ export interface Database {
           id?: string
           clerk_user_id?: string
           name?: string
-          email?: string
+          email?: string | null
           role?: 'basic' | 'pro' | 'admin'
           chef?: 'yes' | 'no'
           photo?: string | null
@@ -245,7 +245,7 @@ export interface Database {
           id: string
           user_id: string
           name: string
-          email: string
+          email: string | null
           phone: string | null
           user_location: string | null
           age_range: string | null
@@ -278,6 +278,9 @@ export interface Database {
           verified: string | null
           claimed: boolean
           claim_token: string | null
+          claim_token_hash: string | null
+          claim_token_expires_at: string | null
+          claimed_at: string | null
           created_at: string
           updated_at: string
         }
@@ -285,7 +288,7 @@ export interface Database {
           id?: string
           user_id?: string | null
           name: string
-          email: string
+          email?: string | null
           phone?: string | null
           user_location?: string | null
           age_range?: string | null
@@ -318,6 +321,9 @@ export interface Database {
           verified?: string | null
           claimed?: boolean
           claim_token?: string | null
+          claim_token_hash?: string | null
+          claim_token_expires_at?: string | null
+          claimed_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -325,7 +331,7 @@ export interface Database {
           id?: string
           user_id?: string
           name?: string
-          email?: string
+          email?: string | null
           phone?: string | null
           user_location?: string | null
           age_range?: string | null
@@ -358,6 +364,9 @@ export interface Database {
           verified?: string | null
           claimed?: boolean
           claim_token?: string | null
+          claim_token_hash?: string | null
+          claim_token_expires_at?: string | null
+          claimed_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -409,11 +418,10 @@ export type UserWithResume = User & {
   resumes?: Resume[]
 }
 
-// Type for creating/updating user from Clerk webhook
-export type ClerkUserData = {
+// Type for creating/updating a mobile-auth user.
+export type MobileUserData = {
   clerk_user_id: string
   name: string
-  email: string
   photo?: string | null
 }
 

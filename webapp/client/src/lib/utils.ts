@@ -5,26 +5,6 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-// Utility function to mask email for basic users
-export function maskEmail(email: string, userRole: string): string {
-  if (userRole === 'pro' || userRole === 'admin') {
-    return email;
-  }
-  
-  // For basic users, mask the email
-  if (!email || email.length < 3) return email;
-  
-  const [localPart, domain] = email.split('@');
-  if (!domain) return email;
-  
-  // Keep first 3 characters of local part, mask the rest
-  const maskedLocal = localPart.length > 3 
-    ? localPart.substring(0, 3) + 'x'.repeat(localPart.length - 3)
-    : localPart;
-  
-  return `${maskedLocal}@${domain}`;
-}
-
 // Utility function to mask phone number for basic users
 export function maskPhone(phone: string, userRole: string): string {
   if (userRole === 'pro' || userRole === 'admin') {

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { useUser } from '@clerk/nextjs';
+import { useUser } from '@/lib/auth/client';
 import { useSupabaseUserStore } from '@/store/supabase-store/user-db-store';
 import { useSupabaseResumeStore } from '@/store/supabase-store/resume-db-store';
 import { Resume } from '@/types/supabase';
@@ -20,7 +20,6 @@ import { toast, Toaster } from 'sonner';
 // Interface for editable resume data (complete Resume type for editing)
 interface EditableResumeData {
   name: string;
-  email: string;
   phone: string;
   user_location: string;
   age_range: string;
@@ -56,10 +55,16 @@ type ResumeEditableKey = keyof EditableResumeData & keyof Resume;
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user: clerkUser } = useUser();
-  const { findAndSetCurrentUserByClerkId, clearCurrentUser, currentUser, isLoading: userLoading, error: userError } = useSupabaseUserStore();
+  const { user: authUser } = useUser();
+  const {
+    findAndSetCurrentUserByIdentityId,
+    clearCurrentUser,
+    currentUser,
+    isLoading: userLoading,
+    error: userError,
+    isUserLoaded,
+  } = useSupabaseUserStore();
   const { fetchResumesByUserId, resumes, updateResume, isLoading: resumesLoading, error: resumesError } = useSupabaseResumeStore();
-  const emailSyncedRef = useRef(false);
   const [userResume, setUserResume] = useState<Resume | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editValues, setEditValues] = useState<Partial<EditableResumeData>>({});
@@ -69,7 +74,7 @@ export default function DashboardPage() {
   const hasFetchedResumes = useRef(false);
   const [isProcessingClaim, setIsProcessingClaim] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   // File upload state
   const [uploadingFile, setUploadingFile] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -78,8 +83,15 @@ export default function DashboardPage() {
   const [deletingFile, setDeletingFile] = useState(false);
 
   // Derived Supabase user fields
-  const userName = currentUser?.name ?? '';
-  const userEmail = currentUser?.email ?? '';
+  const accountMobile =
+    authUser?.primaryPhoneNumber?.phoneNumber ||
+    (currentUser?.clerk_user_id?.startsWith('phone:')
+      ? currentUser.clerk_user_id.replace('phone:', '')
+      : '');
+  const userName =
+    currentUser?.name && currentUser.name !== accountMobile
+      ? currentUser.name
+      : accountMobile;
   const userRole = currentUser?.role ?? '';
   const chefStatus = currentUser?.chef ?? '';
   const isChef = chefStatus === 'yes';
@@ -88,14 +100,12 @@ export default function DashboardPage() {
     hasFetchedResumes.current = false;
   }, [currentUser?.id]);
 
-  // Fetch current user from Supabase when Clerk user is available
+  // Fetch the Supabase profile once the mobile session is available.
   useEffect(() => {
-    if (clerkUser?.id) {
-      console.log('🔍 Dashboard: Clerk user ID:', clerkUser.id);
-      console.log('🔍 Dashboard: Fetching Supabase user with Clerk ID:', clerkUser.id);
-      findAndSetCurrentUserByClerkId(clerkUser.id);
+    if (authUser?.id) {
+      findAndSetCurrentUserByIdentityId(authUser.id);
     }
-  }, [clerkUser?.id, findAndSetCurrentUserByClerkId]);
+  }, [authUser?.id, findAndSetCurrentUserByIdentityId]);
 
   // Fetch user's resumes when current user is found
   useEffect(() => {
@@ -104,69 +114,29 @@ export default function DashboardPage() {
       // to avoid race conditions where fetch runs before claim completes.
       const pendingToken = localStorage.getItem('claim_token');
       if (pendingToken) {
-        console.log("⏳ Dashboard: Claim token found, deferring initial resume fetch...");
         setIsProcessingClaim(true);
         return;
       }
 
-      console.log("CURRENT USER ID:", currentUser?.id)
-      console.log("FETCHING RESUME WITH user_id")
       hasFetchedResumes.current = true;
       fetchResumesByUserId(currentUser.id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.id]);
 
-  useEffect(() => {
-    if (hasFetchedResumes.current) {
-      console.log("RESUME RESULT:", resumes)
-    }
-  }, [resumes]);
-
   // Set the first resume as user's resume (assuming one resume per user)
   useEffect(() => {
     if (resumes.length > 0) {
-      console.log('✅ Dashboard: Resume found for user:', resumes[0]);
       setUserResume(resumes[0]);
     } else if (resumes.length === 0 && !resumesLoading) {
-      console.log('📝 Dashboard: No resumes found for current user');
       setUserResume(null);
     }
   }, [resumes, resumesLoading]);
 
-  // Silently sync temp email → real email after resume loads (WAHA flow)
-  // Runs once per session when a resume with a temp email is detected
-  useEffect(() => {
-    if (!currentUser?.id || !userResume || emailSyncedRef.current) return;
-
-    const isTempEmail = userResume.email?.endsWith('@wa.chefdhundo.com') ?? false;
-    if (!isTempEmail) return; // Already a real email — nothing to do
-
-    emailSyncedRef.current = true; // Prevent duplicate calls
-    console.log('📧 Dashboard: Temp email detected, syncing to real email...');
-
-    fetch('/api/resumes/sync-email', { method: 'POST' })
-      .then(res => res.json())
-      .then(result => {
-        if (result.success && result.updated && result.resume) {
-          console.log('📧 Dashboard: Email synced successfully →', result.resume.email);
-          setUserResume(result.resume); // Update UI immediately
-          fetchResumesByUserId(currentUser.id); // Refresh store in background
-        } else {
-          console.log('ℹ️ Dashboard: Sync-email skipped:', result.message);
-        }
-      })
-      .catch(err => {
-        emailSyncedRef.current = false; // Allow retry on next render if it failed
-        console.error('❌ Dashboard: Email sync request failed:', err);
-      });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.id, userResume?.id]);
-
-  // Silently check for pending claim token from OAuth redirect.
+  // Silently check for pending claim token from mobile sign-in redirect.
   // This fires once when currentUser.id is first available.
   useEffect(() => {
-    if (!currentUser?.id || !clerkUser?.id) return;
+    if (!currentUser?.id || !authUser?.id) return;
 
     const token = localStorage.getItem('claim_token');
     if (!token) return;
@@ -175,10 +145,8 @@ export default function DashboardPage() {
     localStorage.removeItem('claim_token');
     setIsProcessingClaim(true);
 
-    console.log('🔄 Dashboard: Found pending claim token, processing claim...');
-
     let claimSucceeded = false;
-    
+
     fetch('/api/resumes/claim', {
       method: 'POST',
       headers: {
@@ -189,7 +157,6 @@ export default function DashboardPage() {
       .then(res => res.json())
       .then(result => {
         if (result.success) {
-          console.log('✅ Dashboard: Resume claimed successfully via pending token.');
           toast.success('Resume claimed successfully!');
           claimSucceeded = true;
         } else {
@@ -205,12 +172,10 @@ export default function DashboardPage() {
         // If claim succeeded, also re-fetch the Supabase user to pick up
         // the chef='yes' flag that the claim API just wrote, so the dashboard
         // renders the resume editor instead of the basic info panel.
-        if (claimSucceeded && clerkUser?.id) {
-          console.log('🔄 Dashboard: Claim succeeded — re-fetching Supabase user to pick up chef=yes...');
-          // Clear cached user so findAndSetCurrentUserByClerkId makes a fresh API call.
+        if (claimSucceeded && authUser?.id) {
+          // Clear cached user so the mobile profile store makes a fresh API call.
           clearCurrentUser();
-          await findAndSetCurrentUserByClerkId(clerkUser.id);
-          console.log('✅ Dashboard: Supabase user re-fetched after claim.');
+          await findAndSetCurrentUserByIdentityId(authUser.id);
         }
         hasFetchedResumes.current = true;
         await fetchResumesByUserId(currentUser.id);
@@ -225,7 +190,6 @@ export default function DashboardPage() {
       // Initialize edit values with current resume data
       const initialValues: Partial<EditableResumeData> = {
         name: userResume.name || '',
-        email: userResume.email || '',
         phone: userResume.phone || '',
         user_location: userResume.user_location || '',
         age_range: userResume.age_range || '',
@@ -271,7 +235,6 @@ export default function DashboardPage() {
 
     const resumeData = {
       name: userResume.name || 'Chef Name',
-      email: userResume.email || 'Email not provided',
       mobile: userResume.phone || 'Phone not provided',
       location: userResume.user_location || userResume.city || 'Location not specified',
       age: userResume.age_range || 'Age not specified',
@@ -314,13 +277,12 @@ export default function DashboardPage() {
 
   const handleSaveAllChanges = async () => {
     if (!userResume?.id || !hasChanges) {
-      console.log('❌ Cannot save - missing resume ID or no changes');
       return;
     }
 
     try {
       setIsUpdating(true);
-      
+
       // Process the edit values to ensure proper data types
       const processedUpdates: Partial<Resume> = {};
 
@@ -354,23 +316,20 @@ export default function DashboardPage() {
         (processedUpdates as Record<string, number | string | null>)[key] = value as string | null;
       });
 
-      console.log('🔄 Saving all changes for resume:', userResume.id);
-      console.log('🔄 Updates:', processedUpdates);
-      
+
       await updateResume(userResume.id, processedUpdates);
-      
-      console.log('✅ All changes saved successfully');
-      
+
+
       // Update local state
       setUserResume({
         ...userResume,
         ...processedUpdates
       } as Resume);
-      
+
       // Show success message
       setSuccessMessage('All changes saved successfully!');
       setTimeout(() => setSuccessMessage(''), 4000);
-      
+
       setIsEditing(false);
       setEditValues({});
       setHasChanges(false);
@@ -408,7 +367,6 @@ export default function DashboardPage() {
       setUploadError('');
       setUploadProgress(0);
 
-      console.log('📤 Uploading file:', file.name);
 
       // Create form data
       const formData = new FormData();
@@ -435,7 +393,6 @@ export default function DashboardPage() {
         throw new Error(result.error || 'Upload failed');
       }
 
-      console.log('✅ File uploaded successfully:', result.url);
 
       // Update local resume state
       setUserResume({
@@ -469,7 +426,6 @@ export default function DashboardPage() {
 
     try {
       setDownloadingFile(true);
-      console.log('📥 Requesting download URL for resume:', userResume.id);
 
       const response = await fetch(`/api/resumes/download?resumeId=${userResume.id}`);
       const result = await response.json();
@@ -478,8 +434,7 @@ export default function DashboardPage() {
         throw new Error(result.error || 'Failed to get download URL');
       }
 
-      console.log('✅ Opening resume in new tab');
-      
+
       // Open in new tab
       window.open(result.url, '_blank');
     } catch (error) {
@@ -520,17 +475,10 @@ export default function DashboardPage() {
     return (
       <div className="flex items-center gap-4 mb-4">
         <Label className="font-medium text-gray-700 w-32">{label}:</Label>
-        
+
         <div className="flex-1">
           {isEditing ? (
-            fieldName === 'email' ? (
-              <Input
-                value={String(displayValue || '')}
-                className="flex-1 bg-gray-100"
-                readOnly
-                disabled
-              />
-            ) : type === 'textarea' ? (
+            type === 'textarea' ? (
               <Textarea
                 value={typeof displayValue === 'string' ? displayValue : ''}
                 onChange={(e) => handleFieldChange(fieldName, e.target.value)}
@@ -585,12 +533,14 @@ export default function DashboardPage() {
     );
   };
 
-  if (userLoading || (resumesLoading && !userResume) || isProcessingClaim) {
+  const waitingForMobileProfile = Boolean(authUser && !currentUser && !isUserLoaded && !userError);
+
+  if (userLoading || waitingForMobileProfile || (resumesLoading && !userResume) || isProcessingClaim) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50">
         <Loader2 className="w-10 h-10 animate-spin text-orange-600 mb-4" />
         <div className="text-lg text-gray-700">
-          {isProcessingClaim ? 'Processing your claim...' : 'Loading your dashboard...'}
+          {isProcessingClaim ? 'Processing your claim...' : 'Loading your mobile account...'}
         </div>
       </div>
     );
@@ -617,7 +567,7 @@ export default function DashboardPage() {
               <p className="text-gray-600 text-center">
                 {isEditing ? 'Edit your resume information below' : 'View and update your resume information'}
               </p>
-              
+
               {!isEditing && (
                 <div className="flex justify-center mt-4">
                   <Button
@@ -631,16 +581,15 @@ export default function DashboardPage() {
                 </div>
               )}
             </CardHeader>
-            
+
             <CardContent className="space-y-6">
               {/* Personal Information */}
               <div className="space-y-4">
                 <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">
                   Personal Information
                 </h3>
-                
+
                 {renderField('name', 'Full Name', userResume.name)}
-                {renderField('email', 'Email', userResume.email)} {/* Email is disabled */}
                 {renderField('phone', 'Phone', userResume.phone)}
                 {renderField('age_range', 'Age Range', userResume.age_range, 'select', ['18-25', '26-35', '36-45', '46-55', '55+'])}
                 {renderField('gender', 'Gender', userResume.gender, 'select', ['Male', 'Female', 'Other', 'Prefer not to say'])}
@@ -655,7 +604,7 @@ export default function DashboardPage() {
                 <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">
                   Professional Information
                 </h3>
-                
+
                 {renderField('profession', 'Profession', userResume.profession)}
                 {renderField('job_role', 'Job Role/Title', userResume.job_role)}
                 {renderField('experience_years', 'Experience (Years)', userResume.experience_years, 'number')}
@@ -671,7 +620,7 @@ export default function DashboardPage() {
                 <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">
                   Salary & Work Preferences
                 </h3>
-                
+
                 {renderField('current_ctc', 'Current Salary', userResume.current_ctc)}
                 {renderField('expected_ctc', 'Expected Salary', userResume.expected_ctc)}
                 {renderField('notice_period', 'Notice Period', userResume.notice_period)}
@@ -687,7 +636,7 @@ export default function DashboardPage() {
                 <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">
                   Professional Profile
                 </h3>
-                
+
                 {renderField('bio', 'Bio/About Yourself', userResume.bio, 'textarea')}
                 {renderField('linkedin_profile', 'LinkedIn Profile', userResume.linkedin_profile)}
                 {renderField('portfolio_website', 'Portfolio/Website', userResume.portfolio_website)}
@@ -698,9 +647,9 @@ export default function DashboardPage() {
                 <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">
                   Documents & Additional Information
                 </h3>
-                
+
                 {renderField('passport', 'Passport Number', userResume.passport)}
-                
+
                 <div className="space-y-2">
                   <Label className="font-medium text-gray-700">Profile Photo:</Label>
                   <div className="text-sm text-gray-600">
@@ -713,11 +662,11 @@ export default function DashboardPage() {
                     )}
                   </div>
                 </div>
-                
+
                 {/* Resume File Upload Section */}
                 <div className="space-y-3 pt-2">
                   <Label className="font-medium text-gray-700">Resume File (PDF):</Label>
-                  
+
                   {/* Hidden file input */}
                   <input
                     ref={fileInputRef}
@@ -726,7 +675,7 @@ export default function DashboardPage() {
                     onChange={handleFileUpload}
                     className="hidden"
                   />
-                  
+
                   {/* Upload and download buttons */}
                   <div className="flex items-center gap-3">
                     <Button
@@ -748,7 +697,7 @@ export default function DashboardPage() {
                         </>
                       )}
                     </Button>
-                    
+
                     {userResume?.resume_file && (
                       <Button
                         type="button"
@@ -789,7 +738,7 @@ export default function DashboardPage() {
                       </Button>
                     )}
                   </div>
-                  
+
                   {/* Upload progress */}
                   {uploadingFile && (
                     <div className="space-y-2">
@@ -802,7 +751,7 @@ export default function DashboardPage() {
                       <p className="text-xs text-gray-500">{uploadProgress}% uploaded</p>
                     </div>
                   )}
-                  
+
                   {/* Upload error */}
                   {uploadError && (
                     <p className="text-sm text-red-600 flex items-center gap-2">
@@ -810,7 +759,7 @@ export default function DashboardPage() {
                       {uploadError}
                     </p>
                   )}
-                  
+
                   {/* Current file status */}
                   {userResume?.resume_file && !uploadingFile && (
                     <div className="flex items-center gap-2 text-sm text-gray-600 bg-green-50 p-3 rounded-md border border-green-200">
@@ -818,7 +767,7 @@ export default function DashboardPage() {
                       <span>Resume file uploaded successfully</span>
                     </div>
                   )}
-                  
+
                   {/* View Chef Dhundo Resume template */}
                   <div className="pt-2">
                     <Button
@@ -834,7 +783,7 @@ export default function DashboardPage() {
                     Upload a PDF file (max 10MB). This will be visible to employers viewing your profile.
                   </p>
                 </div>
-                
+
                 <div className="pt-4 border-t">
                   <div className="text-sm text-gray-600 space-y-2">
                     <p><strong>Resume Created:</strong> {userResume.created_at ? new Date(userResume.created_at).toLocaleDateString() : 'N/A'}</p>
@@ -874,7 +823,7 @@ export default function DashboardPage() {
                       </>
                     )}
                   </Button>
-                  
+
                   <Button
                     onClick={handleCancelEdit}
                     disabled={isUpdating}
@@ -898,12 +847,12 @@ export default function DashboardPage() {
     <div className="flex items-center justify-center min-h-screen">
       <div className="text-center">
         <h1 className="text-2xl font-bold mb-4">Dashboard</h1>
-        
+
         {currentUser ? (
           <div className="mt-6 space-y-4">
             <div className="flex items-center gap-4">
-              <span className="font-medium text-gray-700 w-16">Name:</span>
-              <Input 
+              <span className="font-medium text-gray-700 w-16">Account:</span>
+              <Input
                 value={userName}
                 className="w-64"
                 readOnly
@@ -911,9 +860,9 @@ export default function DashboardPage() {
               />
             </div>
             <div className="flex items-center gap-4">
-              <span className="font-medium text-gray-700 w-16">Email:</span>
-              <Input 
-                value={userEmail}
+              <span className="font-medium text-gray-700 w-16">Mobile:</span>
+              <Input
+                value={accountMobile}
                 className="w-64"
                 readOnly
                 disabled
@@ -921,7 +870,7 @@ export default function DashboardPage() {
             </div>
             <div className="flex items-center gap-4">
               <span className="font-medium text-gray-700 w-16">Role:</span>
-              <Input 
+              <Input
                 value={userRole}
                 className="w-64"
                 readOnly
@@ -930,7 +879,7 @@ export default function DashboardPage() {
             </div>
             <div className="flex items-center gap-4">
               <span className="font-medium text-gray-700 w-16">Chef:</span>
-              <Input 
+              <Input
                 value={chefStatus}
                 className="w-64"
                 readOnly
@@ -952,13 +901,28 @@ export default function DashboardPage() {
               </Avatar>
             </div> */}
           </div>
+        ) : authUser ? (
+          <div className="mt-6">
+            <p className="text-orange-600">Mobile account is syncing...</p>
+            <p className="text-sm text-gray-500 mb-4">Your login is active. We are loading your dashboard profile.</p>
+            <Button
+              type="button"
+              onClick={() => findAndSetCurrentUserByIdentityId(authUser.id)}
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+            >
+              Retry Dashboard Load
+            </Button>
+          </div>
+        ) : isUserLoaded ? (
+          <div className="mt-6">
+            <p className="text-orange-600">Please sign in with your mobile number.</p>
+          </div>
         ) : (
           <div className="mt-6">
-            <p className="text-orange-600">User not found in database</p>
-            <p className="text-sm text-gray-500">Clerk ID: {clerkUser?.id}</p>
+            <p className="text-gray-600">Loading your mobile account...</p>
           </div>
         )}
-        
+
       </div>
       <Toaster />
     </div>
