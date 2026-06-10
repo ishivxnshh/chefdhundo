@@ -1,9 +1,45 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth/server";
+import { auth, syntheticIdToPhone } from "@/lib/auth/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
 import crypto from "crypto";
 import { resolveRazorpayKeySecret } from "@/lib/razorpay/config";
+
+// ================================================
+// 📱 WAHA WhatsApp – direct send helper
+// ================================================
+async function sendWahaMessage(phone: string, text: string): Promise<void> {
+  const wahaUrl = process.env.WAHA_URL;
+  const wahaKey = process.env.WAHA_API_KEY;
+  const wahaSession = process.env.WAHA_SESSION || "default";
+
+  if (!wahaUrl || !wahaKey) {
+    console.warn("⚠️ WAHA_URL or WAHA_API_KEY not set — skipping WhatsApp notification");
+    return;
+  }
+
+  // Convert +91XXXXXXXXXX → 91XXXXXXXXXX@c.us (WAHA chatId format)
+  const chatId = phone.replace("+", "") + "@c.us";
+
+  const response = await fetch(`${wahaUrl}/api/sendText`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Api-Key": wahaKey,
+    },
+    body: JSON.stringify({ session: wahaSession, chatId, text }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`WAHA sendText failed (${response.status}): ${err}`);
+  }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 
 const supabase = createClient<Database>(
   process.env.SUPABASE_PROJECT_URL!,
@@ -155,10 +191,74 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // ================================================
+    // 📱 WhatsApp – Payment Success Notification
+    // Fire-and-forget: payment response is never delayed or blocked.
+    // If WAHA is unreachable the payment still succeeds normally.
+    // ================================================
+    void (async () => {
+      try {
+        // userId = session.sub = clerk_user_id = "phone:+91XXXXXXXXXX"
+        const phone = syntheticIdToPhone(userId);
+        if (!phone) {
+          console.warn("⚠️ Could not extract phone from userId for WhatsApp notification");
+          return;
+        }
+
+        const planName = paymentData.plan_name;
+
+        const msg1 =
+          `✨ Thank you for choosing us! Your purchase has been successfully received, and we can't wait for you to enjoy what's coming next.
+
+You can log in to ChefDhundo.com and click on Find Chefs. There you'll see 80+ resumes and more.`;
+
+        const msg2 =
+          `Greetings Sir,
+
+You've got access to 500+ hospitality candidates PAN India.
+
+Few of them you can get through our official website and the rest I've attached below with their complete reference.
+
+https://tinyurl.com/2ffwfdzb
+
+https://tinyurl.com/37er5zsv`;
+
+        const msg3 =
+          `Please send your information:
+
+Restaurant name & Location:
+
+Facilities you'll be providing:
+
+Salary for staff:
+
+Staff Required:
+
+Contact to send resume on:`;
+
+        console.log(`📱 Sending payment success WhatsApp to ${phone} (${planName})`);
+
+        await sendWahaMessage(phone, msg1);
+        await delay(3000);
+        await sendWahaMessage(phone, msg2);
+        await delay(3000);
+        await sendWahaMessage(phone, msg3);
+
+        console.log(`✅ Payment success WhatsApp sent to ${phone}`);
+      } catch (err) {
+        // Log but never surface to the user — payment already succeeded.
+        console.error(
+          "❌ WhatsApp payment notification failed:",
+          err instanceof Error ? err.message : String(err)
+        );
+      }
+    })();
+
     return NextResponse.json({
       success: true,
       message: "Payment verified and processed successfully.",
     });
+
   } catch (error) {
     console.error("Error verifying payment:", error);
     return NextResponse.json(

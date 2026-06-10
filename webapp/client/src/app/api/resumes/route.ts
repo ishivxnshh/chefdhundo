@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth/server";
+import { auth, ensureUserForPhone } from "@/lib/auth/server";
 import {
   createResume,
   getAllResumes,
@@ -8,9 +8,8 @@ import {
   getUserByIdentityId,
 } from "@/lib/supabase/database";
 import type { Resume, ResumeInsert } from "@/types/supabase";
-import { generateToken } from "@/lib/generateToken";
+import { supabaseAdmin } from "@/lib/supabase/supabase";
 import {
-  hashClaimToken,
   serializeResumeForViewer,
   serializeResumesForViewer,
   verifyWhatsappIngestionSecret,
@@ -167,6 +166,11 @@ export async function POST(request: NextRequest) {
 
   try {
     let viewer: Awaited<ReturnType<typeof getViewer>> = null;
+
+    // --- WhatsApp Bot Path ---
+    // Verify the shared secret so only the trusted bot can use this path.
+    // Once verified, immediately create/retrieve the user record by phone number
+    // using the same helper the claim flow uses, so the resume is owned from birth.
     if (isWhatsapp) {
       const trusted = verifyWhatsappIngestionSecret(
         request.headers.get("x-chefdhundo-webhook-secret"),
@@ -179,6 +183,7 @@ export async function POST(request: NextRequest) {
         );
       }
     } else {
+      // --- Website / Authenticated Path (unchanged) ---
       viewer = await getViewer();
       if (!viewer) {
         return NextResponse.json(
@@ -206,9 +211,36 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const claimToken = isWhatsapp ? generateToken() : null;
+    // --- Determine ownership ---
+    // For WhatsApp requests: resolve the user record immediately from the phone number.
+    // ensureUserForPhone() mirrors the exact logic used in the claim flow:
+    //   - Normalises the phone to +91XXXXXXXXXX
+    //   - Looks up the users table by clerk_user_id (synthetic phone identity)
+    //   - Creates a new user row if one does not exist yet
+    // This means the resume is owned from the moment it is created — no claim step needed.
+    let whatsappUserId: string | null = null;
+    if (isWhatsapp) {
+      try {
+        const whatsappUser = await ensureUserForPhone(String(body.phone));
+        whatsappUserId = whatsappUser.id;
+        // Mark the user as a chef, consistent with what the claim flow does.
+        await supabaseAdmin
+          .from("users")
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .update({ chef: "yes" } as any)
+          .eq("id", whatsappUserId);
+      } catch (userErr) {
+        console.error("POST /api/resumes — ensureUserForPhone failed:", errorMessage(userErr));
+        return NextResponse.json(
+          { success: false, error: "Could not resolve user for this phone number" },
+          { status: 500 }
+        );
+      }
+    }
+
     const resumeData: ResumeInsert = {
-      user_id: isWhatsapp ? null : viewer?.userId || null,
+      // WhatsApp resumes are immediately owned; web resumes use the viewer's ID.
+      user_id: isWhatsapp ? whatsappUserId : viewer?.userId || null,
       name: String(body.name),
       phone: String(body.phone),
       user_location: (body.user_location as string) || null,
@@ -244,12 +276,11 @@ export async function POST(request: NextRequest) {
       passport: (body.passport as string) || null,
       photo: (body.photo as string) || null,
       resume_file: (body.resume_file as string) || null,
-      claimed: !isWhatsapp,
+      // WhatsApp resumes are claimed immediately — no token, no ownership transfer.
+      claimed: true,
       claim_token: null,
-      claim_token_hash: claimToken ? hashClaimToken(claimToken) : null,
-      claim_token_expires_at: claimToken
-        ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-        : null,
+      claim_token_hash: null,
+      claim_token_expires_at: null,
     };
 
     const result = await createResume(resumeData);
@@ -265,9 +296,9 @@ export async function POST(request: NextRequest) {
         success: true,
         data: serializeResumeForViewer(result.data as Resume, {
           role: viewer?.role || "basic",
-          userId: viewer?.userId || null,
+          userId: viewer?.userId || whatsappUserId,
         }),
-        token: isWhatsapp ? claimToken : undefined,
+        // No token returned — WhatsApp resumes no longer require a claim step.
       },
       { status: 201 }
     );
