@@ -219,9 +219,8 @@ function UpgradePage() {
                     transition={{ duration: 0.6, delay: 0.1 * index }}
                   >
                     <Card
-                      className={`relative h-full transition-all duration-300 hover:shadow-lg ${
-                        plan.popular ? "border-orange-500" : ""
-                      }`}
+                      className={`relative h-full transition-all duration-300 hover:shadow-lg ${plan.popular ? "border-orange-500" : ""
+                        }`}
                     >
                       {plan.popular && (
                         <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
@@ -302,8 +301,7 @@ function UpgradePage() {
                     <DialogTitle>Complete Your Upgrade</DialogTitle>
                     <DialogDescription>
                       {selectedPlan &&
-                        `You've selected: ${
-                          plans.find((p) => p.id === selectedPlan)?.name
+                        `You've selected: ${plans.find((p) => p.id === selectedPlan)?.name
                         }`}
                     </DialogDescription>
                   </DialogHeader>
