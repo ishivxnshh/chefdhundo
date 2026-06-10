@@ -4,11 +4,25 @@ import { verifyWhatsappIngestionSecret } from "@/lib/resumes/security";
 
 export async function POST(request: NextRequest) {
   try {
+    const providedSecret = request.headers.get("x-chefdhundo-webhook-secret");
+    const configuredSecret = process.env.WHATSAPP_INGEST_SECRET;
+
+    console.warn("[DIAGNOSTIC] POST /api/resumes/check WhatsApp Auth Check:", {
+      url: request.url,
+      method: request.method,
+      env: process.env.NODE_ENV,
+      hasConfiguredSecret: !!configuredSecret,
+      configuredLength: configuredSecret?.length,
+      providedLength: providedSecret?.length,
+      headers: Array.from(request.headers.keys())
+    });
+
     const trusted = verifyWhatsappIngestionSecret(
-      request.headers.get("x-chefdhundo-webhook-secret"),
-      process.env.WHATSAPP_INGEST_SECRET
+      providedSecret,
+      configuredSecret
     );
     if (!trusted) {
+      console.warn("[DIAGNOSTIC] POST /api/resumes/check returning 401. trusted=false");
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 401 }

@@ -172,11 +172,26 @@ export async function POST(request: NextRequest) {
     // Once verified, immediately create/retrieve the user record by phone number
     // using the same helper the claim flow uses, so the resume is owned from birth.
     if (isWhatsapp) {
+      const providedSecret = request.headers.get("x-chefdhundo-webhook-secret");
+      const configuredSecret = process.env.WHATSAPP_INGEST_SECRET;
+      
+      console.warn("[DIAGNOSTIC] POST /api/resumes WhatsApp Auth Check:", {
+        url: request.url,
+        method: request.method,
+        env: process.env.NODE_ENV,
+        hasConfiguredSecret: !!configuredSecret,
+        configuredLength: configuredSecret?.length,
+        providedLength: providedSecret?.length,
+        headers: Array.from(request.headers.keys()),
+        isWhatsappFlag: isWhatsapp
+      });
+
       const trusted = verifyWhatsappIngestionSecret(
-        request.headers.get("x-chefdhundo-webhook-secret"),
-        process.env.WHATSAPP_INGEST_SECRET
+        providedSecret,
+        configuredSecret
       );
       if (!trusted) {
+        console.warn("[DIAGNOSTIC] POST /api/resumes returning 401 from WhatsApp branch. trusted=false");
         return NextResponse.json(
           { success: false, error: "Unauthorized" },
           { status: 401 }
@@ -186,6 +201,10 @@ export async function POST(request: NextRequest) {
       // --- Website / Authenticated Path (unchanged) ---
       viewer = await getViewer();
       if (!viewer) {
+        console.warn("[DIAGNOSTIC] POST /api/resumes returning 401 from Website/Authenticated branch. viewer=null", {
+          isWhatsappFlag: isWhatsapp,
+          bodyKeys: Object.keys(body)
+        });
         return NextResponse.json(
           { success: false, error: "Unauthorized" },
           { status: 401 }
@@ -228,7 +247,7 @@ export async function POST(request: NextRequest) {
           .from("users")
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           .update({ chef: "yes" } as any)
-          .eq("id", whatsappUserId);
+          .eq("id", whatsappUser.id);
       } catch (userErr) {
         console.error("POST /api/resumes — ensureUserForPhone failed:", errorMessage(userErr));
         return NextResponse.json(

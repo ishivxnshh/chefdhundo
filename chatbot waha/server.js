@@ -10,7 +10,7 @@ app.use(express.json({ limit: "10mb" }));
 // ===============================
 // 🌐 CONFIG
 // ===============================
-const BASE_URL = "https://7bd3-103-51-72-144.ngrok-free.app";
+const BASE_URL = "https://chefdhundo.com";
 
 const WAHA_URL = "http://13.233.124.22";
 const WAHA_API_KEY = "8bd2ab7aa5834b79983d569c7b6495e9";
@@ -19,6 +19,16 @@ const WAHA_SESSION = "default";
 // ✅ CHANGE 1: WhatsApp ingestion secret — must match WHATSAPP_INGEST_SECRET
 // env variable on the website server. Required by /api/resumes/check and /api/resumes.
 const WHATSAPP_INGEST_SECRET = process.env.WHATSAPP_INGEST_SECRET || "";
+
+console.log(
+    "WHATSAPP_INGEST_SECRET loaded:",
+    WHATSAPP_INGEST_SECRET ? "YES" : "NO"
+);
+
+console.log(
+    "WHATSAPP_INGEST_SECRET length:",
+    WHATSAPP_INGEST_SECRET.length
+);
 
 // ✅ FIX: When BASE_URL points to an ngrok tunnel, every outbound fetch must include
 // the "ngrok-skip-browser-warning" header. Without it, ngrok intercepts the request
