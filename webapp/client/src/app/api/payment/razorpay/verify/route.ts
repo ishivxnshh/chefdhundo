@@ -197,23 +197,24 @@ export async function POST(request: NextRequest) {
     // If WAHA is unreachable the payment still succeeds normally.
     // ================================================
     void (async () => {
-      try {
-        // userId = session.sub = clerk_user_id = "phone:+91XXXXXXXXXX"
-        const phone = syntheticIdToPhone(userId);
-        if (!phone) {
-          console.warn("⚠️ Could not extract phone from userId for WhatsApp notification");
-          return;
-        }
+      console.log("[STEP 1] Starting purchase flow");
+      
+      // userId = session.sub = clerk_user_id = "phone:+91XXXXXXXXXX"
+      const phone = syntheticIdToPhone(userId);
+      if (!phone) {
+        console.warn("⚠️ Could not extract phone from userId for WhatsApp notification");
+        return;
+      }
 
-        const planName = paymentData.plan_name;
+      const planName = paymentData.plan_name;
 
-        const msg1 =
-          `✨ Thank you for choosing us! Your purchase has been successfully received, and we can't wait for you to enjoy what's coming next.
+      const msg1 =
+        `✨ Thank you for choosing us! Your purchase has been successfully received, and we can't wait for you to enjoy what's coming next.
 
 You can log in to ChefDhundo.com and click on Find Chefs. There you'll see 80+ resumes and more.`;
 
-        const msg2 =
-          `Greetings Sir,
+      const msg2 =
+        `Greetings Sir,
 
 You've got access to 500+ hospitality candidates PAN India.
 
@@ -223,8 +224,8 @@ https://tinyurl.com/2ffwfdzb
 
 https://tinyurl.com/37er5zsv`;
 
-        const msg3 =
-          `Please send your information:
+      const msg3 =
+        `Please send your information:
 
 Restaurant name & Location:
 
@@ -236,22 +237,37 @@ Staff Required:
 
 Contact to send resume on:`;
 
-        console.log(`📱 Sending payment success WhatsApp to ${phone} (${planName})`);
+      console.log(`📱 Sending payment success WhatsApp to ${phone} (${planName})`);
 
+      try {
+        console.log("[STEP 2] Sending thank you message");
         await sendWahaMessage(phone, msg1);
-        await delay(3000);
-        await sendWahaMessage(phone, msg2);
-        await delay(3000);
-        await sendWahaMessage(phone, msg3);
-
-        console.log(`✅ Payment success WhatsApp sent to ${phone}`);
+        console.log("[STEP 3] Thank you message sent");
       } catch (err) {
-        // Log but never surface to the user — payment already succeeded.
-        console.error(
-          "❌ WhatsApp payment notification failed:",
-          err instanceof Error ? err.message : String(err)
-        );
+        console.error("❌ Failed to send thank you message:", err instanceof Error ? err.message : String(err));
       }
+
+      await delay(3000);
+
+      try {
+        console.log("[STEP 4] Sending login instructions");
+        await sendWahaMessage(phone, msg2);
+        console.log("[STEP 5] Login instructions sent");
+      } catch (err) {
+        console.error("❌ Failed to send login instructions:", err instanceof Error ? err.message : String(err));
+      }
+
+      await delay(3000);
+
+      try {
+        console.log("[STEP 6] Sending resume access / onboarding message");
+        await sendWahaMessage(phone, msg3);
+        console.log("[STEP 7] Resume access / onboarding message sent");
+      } catch (err) {
+        console.error("❌ Failed to send resume access / onboarding message:", err instanceof Error ? err.message : String(err));
+      }
+
+      console.log(`✅ Payment success WhatsApp flow completed for ${phone}`);
     })();
 
     return NextResponse.json({
